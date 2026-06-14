@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="lteapi.vcxproj" Id="50563fb6-f421-4d1c-b101-ee4d7cc382c1" />
+</Solution>
