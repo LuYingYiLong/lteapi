@@ -107,7 +107,6 @@ namespace godot {
 		Dictionary validate_sdk_path(const String& sdk_path) const;
 		Array scan_installed_sdks();
 		Array get_installed_sdks() const;
-		Error register_development_sdk(const String& sdk_path);
 		Dictionary install_sdk_from_zip(const String& zip_path);
 		Error remove_installed_sdk(const String& sdk_version);
 		String get_default_sdk_path() const;

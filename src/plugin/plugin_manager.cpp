@@ -56,7 +56,6 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("validate_sdk_path", "sdk_path"), &LTEPluginManager::validate_sdk_path);
 		ClassDB::bind_method(D_METHOD("scan_installed_sdks"), &LTEPluginManager::scan_installed_sdks);
 		ClassDB::bind_method(D_METHOD("get_installed_sdks"), &LTEPluginManager::get_installed_sdks);
-		ClassDB::bind_method(D_METHOD("register_development_sdk", "sdk_path"), &LTEPluginManager::register_development_sdk);
 		ClassDB::bind_method(D_METHOD("install_sdk_from_zip", "zip_path"), &LTEPluginManager::install_sdk_from_zip);
 		ClassDB::bind_method(D_METHOD("remove_installed_sdk", "sdk_version"), &LTEPluginManager::remove_installed_sdk);
 		ClassDB::bind_method(D_METHOD("get_default_sdk_path"), &LTEPluginManager::get_default_sdk_path);
@@ -1301,19 +1300,7 @@ namespace godot {
 	}
 
 	Array LTEPluginManager::scan_installed_sdks() {
-		// Keep dev-registered SDKs (paths outside user://sdks/)
-		Array dev_entries;
-		for (int64_t i = 0; i < installed_sdks.size(); i++) {
-			Dictionary entry = installed_sdks[i];
-			String path = entry.get("path", "");
-			if (!path.begins_with(String(SDK_COLLECTION_BASE_DIR))) {
-				dev_entries.append(entry);
-			}
-		}
 		installed_sdks.clear();
-		for (int64_t i = 0; i < dev_entries.size(); i++) {
-			installed_sdks.append(dev_entries[i]);
-		}
 
 		if (!DirAccess::dir_exists_absolute(SDK_COLLECTION_BASE_DIR)) {
 			return installed_sdks;
@@ -1348,44 +1335,7 @@ namespace godot {
 		return installed_sdks;
 	}
 
-	Error LTEPluginManager::register_development_sdk(const String& sdk_path) {
-		Dictionary validation = validate_sdk_path(sdk_path);
-		if (!bool(validation.get("ok", false))) {
-			ERR_PRINT(String(validation.get("error", "Unknown validation error")));
-			return ERR_INVALID_PARAMETER;
-		}
-
-		String version = String(validation.get("version", ""));
-		if (version.is_empty()) {
-			ERR_PRINT("SDK manifest does not contain a version.");
-			return ERR_INVALID_PARAMETER;
-		}
-
-		String target_path = String(SDK_COLLECTION_BASE_DIR).path_join(version);
-		if (DirAccess::dir_exists_absolute(target_path) && sdk_path != target_path) {
-			WARN_PRINT(vformat("SDK version %s already installed at %s. Use --force to replace.", version, target_path));
-			return ERR_ALREADY_EXISTS;
-		}
-
-		Dictionary entry;
-		entry["version"] = version;
-		entry["path"] = sdk_path;
-
-		for (int64_t i = 0; i < installed_sdks.size(); i++) {
-			Dictionary existing = installed_sdks[i];
-			if (String(existing.get("version", "")) == version) {
-				installed_sdks[i] = entry;
-				_save_sdk_config();
-				print_line(vformat("Updated development SDK registration: %s -> %s", version, sdk_path));
-				return OK;
-			}
-		}
-
-		installed_sdks.append(entry);
-		_save_sdk_config();
-		print_line(vformat("Registered development SDK: %s at %s", version, sdk_path));
-		return OK;
-	}
+	
 
 	Dictionary LTEPluginManager::install_sdk_from_zip(const String& zip_path) {
 		Dictionary result;
