@@ -14,7 +14,7 @@ New-Item -ItemType Directory -Path $ReleaseDir | Out-Null
 
 $AddonDir = Join-Path $ReleaseDir "addons/lteapi"
 New-Item -ItemType Directory -Path $AddonDir | Out-Null
-Copy-Item -LiteralPath (Join-Path $Root "plugin.cfg") -Destination $AddonDir -Force
+Copy-Item -LiteralPath (Join-Path $Root "addons/lteapi/plugin.cfg") -Destination $AddonDir -Force
 
 $BinDir = Join-Path $AddonDir "bin"
 New-Item -ItemType Directory -Path $BinDir | Out-Null
