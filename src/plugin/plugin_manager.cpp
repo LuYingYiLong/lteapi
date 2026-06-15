@@ -11,7 +11,9 @@
 #include <godot_cpp/classes/zip_reader.hpp>
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/time.hpp>
+#include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 namespace godot {
@@ -65,6 +67,13 @@ namespace godot {
 		ADD_SIGNAL(MethodInfo("sdk_installed", PropertyInfo(Variant::STRING, "sdk_version")));
 		ADD_SIGNAL(MethodInfo("sdk_removed", PropertyInfo(Variant::STRING, "sdk_version")));
 
+		ClassDB::bind_method(D_METHOD("start_sdk_download", "url"), &LTEPluginManager::start_sdk_download);
+		ClassDB::bind_method(D_METHOD("get_sdk_download_state"), &LTEPluginManager::get_sdk_download_state);
+		ClassDB::bind_method(D_METHOD("cancel_sdk_download"), &LTEPluginManager::cancel_sdk_download);
+
+		ADD_SIGNAL(MethodInfo("sdk_download_state_changed", PropertyInfo(Variant::DICTIONARY, "state")));
+		ADD_SIGNAL(MethodInfo("sdk_download_completed", PropertyInfo(Variant::DICTIONARY, "result")));
+
 		ADD_SIGNAL(MethodInfo("plugin_installed", PropertyInfo(Variant::STRING, "plugin_id")));
 		ADD_SIGNAL(MethodInfo("plugin_uninstalled", PropertyInfo(Variant::STRING, "plugin_id")));
 		ADD_SIGNAL(MethodInfo("plugin_enabled", PropertyInfo(Variant::STRING, "plugin_id")));
@@ -78,6 +87,13 @@ namespace godot {
 		_scan_installed_plugins();
 		load_plugin_logs();
 		_load_sdk_config();
+
+		_sdk_download_state["active"] = false;
+		_sdk_download_state["state"] = "idle";
+		_sdk_download_state["message"] = "";
+		_sdk_download_state["url"] = "";
+		_sdk_download_state["downloaded_bytes"] = 0;
+		_sdk_download_state["total_bytes"] = 0;
 	}
 
 	LTEPluginManager::~LTEPluginManager() {
@@ -1690,5 +1706,220 @@ namespace godot {
 
 		Dictionary data = json->get_data();
 		return String(data.get("sdk_version", ""));
+	}
+
+	Dictionary LTEPluginManager::start_sdk_download(const String& url) {
+		Dictionary result;
+
+		if (_sdk_download_state["active"]) {
+			result["ok"] = false;
+			result["error"] = "SDK_DOWNLOAD_BUSY_NAME";
+			return result;
+		}
+
+		String stripped = url.strip_edges();
+		String lower = stripped.to_lower();
+		if (!lower.begins_with("https://") && !lower.begins_with("http://")) {
+			result["ok"] = false;
+			result["error"] = "SDK_DOWNLOAD_INVALID_URL_NAME";
+			return result;
+		}
+
+		// Resolve GitHub URLs to archive zip
+		String download_url = stripped;
+		if (!lower.ends_with(".zip") && !lower.contains("/releases/download/")) {
+			if (lower.begins_with("https://github.com/")) {
+				String clean = stripped.split("?")[0].trim_suffix("/");
+				String repo = clean.substr(String("https://github.com/").length());
+				PackedStringArray parts = repo.split("/");
+				if (parts.size() >= 2) {
+					if (parts.size() >= 4 && parts[2] == "tree") {
+						download_url = vformat("https://github.com/%s/%s/archive/refs/heads/%s.zip", parts[0], parts[1], parts[3]);
+					} else {
+						download_url = vformat("https://github.com/%s/%s/archive/refs/heads/main.zip", parts[0], parts[1]);
+					}
+				}
+			}
+		}
+
+		String downloads_dir = "user://sdks/_downloads";
+		DirAccess::make_dir_recursive_absolute(downloads_dir);
+
+		int64_t ticks = Time::get_singleton()->get_ticks_msec();
+		_sdk_download_partial_path = downloads_dir.path_join(vformat("lte-sdk-%d.zip.part", ticks));
+		_sdk_download_final_zip_path = downloads_dir.path_join(vformat("lte-sdk-%d.zip", ticks));
+
+		_ensure_sdk_download_request();
+
+		_sdk_download_state["active"] = true;
+		_sdk_download_state["state"] = "downloading";
+		_sdk_download_state["message"] = "SDK_DOWNLOAD_STARTED_NAME";
+		_sdk_download_state["url"] = download_url;
+		_sdk_download_state["downloaded_bytes"] = 0;
+		_sdk_download_state["total_bytes"] = 0;
+
+		_sdk_download_request->set_download_file(_sdk_download_partial_path);
+		PackedStringArray headers;
+		headers.append("User-Agent: Lightech-Editor");
+		Error err = _sdk_download_request->request(download_url, headers);
+		if (err != OK) {
+			_sdk_download_state["active"] = false;
+			_sdk_download_state["state"] = "failed";
+			_sdk_download_state["message"] = "SDK_DOWNLOAD_REQUEST_FAILED_NAME";
+			result["ok"] = false;
+			result["error"] = "SDK_DOWNLOAD_REQUEST_FAILED_NAME";
+			return result;
+		}
+
+		_emit_sdk_download_state();
+		result["ok"] = true;
+		return result;
+	}
+
+	Dictionary LTEPluginManager::get_sdk_download_state() const {
+		return _sdk_download_state;
+	}
+
+	void LTEPluginManager::cancel_sdk_download() {
+		if (!bool(_sdk_download_state["active"])) {
+			return;
+		}
+		if (_sdk_download_request != nullptr) {
+			_sdk_download_request->cancel_request();
+		}
+		_sdk_download_state["active"] = false;
+		_sdk_download_state["state"] = "idle";
+		_sdk_download_state["message"] = "";
+		_emit_sdk_download_state();
+	}
+
+	void LTEPluginManager::_ensure_sdk_download_request() {
+		if (_sdk_download_request != nullptr) {
+			return;
+		}
+
+		SceneTree *tree = Object::cast_to<SceneTree>(Engine::get_singleton()->get_main_loop());
+		if (tree == nullptr) {
+			return;
+		}
+
+		_sdk_download_request = memnew(HTTPRequest);
+		_sdk_download_request->set_use_threads(true);
+		_sdk_download_request->set_timeout(0.0);
+		_sdk_download_request->connect("request_completed",
+			Callable(this, "_sdk_download_request_completed"));
+		tree->get_root()->add_child(_sdk_download_request);
+	}
+
+	void LTEPluginManager::_sdk_download_request_completed(int result, int response_code, const PackedStringArray& headers, const PackedByteArray& body) {
+		_sdk_download_state["downloaded_bytes"] = (int64_t)_sdk_download_request->get_downloaded_bytes();
+		_sdk_download_state["total_bytes"] = (int64_t)_sdk_download_request->get_body_size();
+
+		if (result != 0) {
+			DirAccess::remove_absolute(_sdk_download_partial_path);
+			_fail_sdk_download("SDK_DOWNLOAD_FAILED_NAME");
+			return;
+		}
+
+		if (response_code < 200 || response_code >= 300) {
+			DirAccess::remove_absolute(_sdk_download_partial_path);
+			_fail_sdk_download("SDK_DOWNLOAD_HTTP_FAILED_NAME");
+			return;
+		}
+
+		if (!FileAccess::file_exists(_sdk_download_partial_path)) {
+			_fail_sdk_download("SDK_DOWNLOAD_PARTIAL_FILE_NAME");
+			return;
+		}
+
+		if (!_is_zip_file(_sdk_download_partial_path)) {
+			DirAccess::remove_absolute(_sdk_download_partial_path);
+			_fail_sdk_download("SDK_DOWNLOAD_NOT_ZIP_NAME");
+			return;
+		}
+
+		Error rename_err = DirAccess::rename_absolute(_sdk_download_partial_path, _sdk_download_final_zip_path);
+		if (rename_err != OK) {
+			DirAccess::remove_absolute(_sdk_download_partial_path);
+			_fail_sdk_download("SDK_DOWNLOAD_PARTIAL_FILE_NAME");
+			return;
+		}
+
+		_sdk_download_state["state"] = "installing";
+		_sdk_download_state["message"] = "SDK_DOWNLOAD_INSTALLING_NAME";
+		_emit_sdk_download_state();
+
+		_install_downloaded_sdk();
+	}
+
+	void LTEPluginManager::_install_downloaded_sdk() {
+		Dictionary install_result = install_sdk_from_zip(_sdk_download_final_zip_path);
+		DirAccess::remove_absolute(_sdk_download_final_zip_path);
+
+		if (bool(install_result.get("ok", false))) {
+			_sdk_download_state["active"] = false;
+			_sdk_download_state["state"] = "succeeded";
+			_sdk_download_state["message"] = "SDK_DOWNLOAD_SUCCESS_NAME";
+			_emit_sdk_download_state();
+			emit_signal("sdk_installed", install_result.get("version", ""));
+			Dictionary complete_result;
+			complete_result["ok"] = true;
+			complete_result["path"] = install_result.get("path", "");
+			emit_signal("sdk_download_completed", complete_result);
+		} else {
+			String error_key = install_result.get("error", "SDK_DOWNLOAD_FAILED_NAME");
+			_fail_sdk_download(error_key);
+		}
+	}
+
+	void LTEPluginManager::_fail_sdk_download(const String& error_key) {
+		_sdk_download_state["active"] = false;
+		_sdk_download_state["state"] = "failed";
+		_sdk_download_state["message"] = error_key;
+		_emit_sdk_download_state();
+		Dictionary complete_result;
+		complete_result["ok"] = false;
+		complete_result["error"] = error_key;
+		emit_signal("sdk_download_completed", complete_result);
+	}
+
+	void LTEPluginManager::_emit_sdk_download_state() {
+		emit_signal("sdk_download_state_changed", _sdk_download_state);
+	}
+
+	bool LTEPluginManager::_is_zip_file(const String& path) {
+		Ref<FileAccess> file = FileAccess::open(path, FileAccess::READ);
+		if (file.is_null()) {
+			return false;
+		}
+		PackedByteArray header = file->get_buffer(4);
+		file->close();
+		if (header.size() < 4) {
+			return false;
+		}
+		if (header[0] != 0x50 || header[1] != 0x4b) {
+			return false;
+		}
+		if (header[2] == 0x03 && header[3] == 0x04) return true;
+		if (header[2] == 0x05 && header[3] == 0x06) return true;
+		if (header[2] == 0x07 && header[3] == 0x08) return true;
+		return false;
+	}
+
+	void LTEPluginManager::_cleanup_stale_sdk_downloads() {
+		String downloads_dir = "user://sdks/_downloads";
+		Ref<DirAccess> dir = DirAccess::open(downloads_dir);
+		if (dir.is_null()) {
+			return;
+		}
+		dir->list_dir_begin();
+		String fn = dir->get_next();
+		while (!fn.is_empty()) {
+			if (!dir->current_is_dir() && (fn.ends_with(".part") || fn.ends_with(".zip"))) {
+				dir->remove(fn);
+			}
+			fn = dir->get_next();
+		}
+		dir->list_dir_end();
 	}
 }

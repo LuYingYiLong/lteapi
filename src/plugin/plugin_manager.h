@@ -9,6 +9,8 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/classes/config_file.hpp>
 #include <godot_cpp/classes/gd_script.hpp>
+#include <godot_cpp/classes/http_request.hpp>
+#include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/templates/hash_map.hpp>
 
 #include "zip_helper.h"
@@ -32,6 +34,13 @@ namespace godot {
 		HashMap<String, Ref<LTEPluginRuntime>> runtimes;
 		Array installed_sdks;
 		String default_sdk_path;
+
+		// Background SDK download state
+		HTTPRequest *_sdk_download_request = nullptr;
+		Dictionary _sdk_download_state;
+		String _sdk_download_partial_path;
+		String _sdk_download_final_zip_path;
+		int64_t _sdk_download_last_emit_msec = 0;
 
 		void _scan_installed_plugins();
 		void _scan_plugin_versions(const String& plugin_id, const String& plugin_root);
@@ -61,6 +70,14 @@ namespace godot {
 		void _load_sdk_config();
 		void _save_sdk_config() const;
 		String _read_sdk_manifest_version(const String& sdk_path) const;
+
+		void _ensure_sdk_download_request();
+		void _emit_sdk_download_state();
+		void _sdk_download_request_completed(int result, int response_code, const PackedStringArray& headers, const PackedByteArray& body);
+		void _install_downloaded_sdk();
+		void _fail_sdk_download(const String& error_key);
+		static bool _is_zip_file(const String& path);
+		void _cleanup_stale_sdk_downloads();
 
 	protected:
 		static void _bind_methods();
@@ -112,6 +129,11 @@ namespace godot {
 		String get_default_sdk_path() const;
 		Error set_default_sdk_path(const String& sdk_path);
 		Dictionary create_plugin_project(const Dictionary& options) const;
+
+		// Background SDK download
+		Dictionary start_sdk_download(const String& url);
+		Dictionary get_sdk_download_state() const;
+		void cancel_sdk_download();
 	};
 }
 
