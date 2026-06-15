@@ -25,9 +25,13 @@ namespace godot {
 
 		static const int MAX_FAIL_COUNT = 3;
 		static const char* PLUGINS_BASE_DIR;
+		static const char* SDK_COLLECTION_BASE_DIR;
 		static const char* CRASH_STATE_PATH;
+		static const char* SDK_MANAGER_CONFIG_PATH;
 
 		HashMap<String, Ref<LTEPluginRuntime>> runtimes;
+		Array installed_sdks;
+		String default_sdk_path;
 
 		void _scan_installed_plugins();
 		void _scan_plugin_versions(const String& plugin_id, const String& plugin_root);
@@ -53,6 +57,10 @@ namespace godot {
 		PackedStringArray _find_dependents(const String& plugin_id) const;
 		bool _is_dependency_version_satisfied(const String& required_version, const String& installed_version) const;
 		void _sync_context_project_root(const String& plugin_id);
+
+		void _load_sdk_config();
+		void _save_sdk_config() const;
+		String _read_sdk_manifest_version(const String& sdk_path) const;
 
 	protected:
 		static void _bind_methods();
@@ -92,6 +100,19 @@ namespace godot {
 		void clear_plugin_log(const String& plugin_id);
 		void save_plugin_log(const String& plugin_id);
 		void load_plugin_logs();
+
+		// SDK management API
+		String get_sdk_collection_dir() const;
+		Error ensure_sdk_collection_dir() const;
+		Dictionary validate_sdk_path(const String& sdk_path) const;
+		Array scan_installed_sdks();
+		Array get_installed_sdks() const;
+		Error register_development_sdk(const String& sdk_path);
+		Dictionary install_sdk_from_zip(const String& zip_path);
+		Error remove_installed_sdk(const String& sdk_version);
+		String get_default_sdk_path() const;
+		Error set_default_sdk_path(const String& sdk_path);
+		Dictionary create_plugin_project(const Dictionary& options) const;
 	};
 }
 

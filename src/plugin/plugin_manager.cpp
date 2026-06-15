@@ -11,11 +11,14 @@
 #include <godot_cpp/classes/zip_reader.hpp>
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/time.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 namespace godot {
 	const char* LTEPluginManager::PLUGINS_BASE_DIR = "user://plugins";
+	const char* LTEPluginManager::SDK_COLLECTION_BASE_DIR = "user://sdks";
 	const char* LTEPluginManager::CRASH_STATE_PATH = "user://plugin_crash_state.cfg";
+	const char* LTEPluginManager::SDK_MANAGER_CONFIG_PATH = "user://plugin_sdk_manager.cfg";
 
 	LTEPluginManager* LTEPluginManager::singleton = nullptr;
 
@@ -48,6 +51,21 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("save_plugin_log", "plugin_id"), &LTEPluginManager::save_plugin_log);
 		ClassDB::bind_method(D_METHOD("load_plugin_logs"), &LTEPluginManager::load_plugin_logs);
 
+		ClassDB::bind_method(D_METHOD("get_sdk_collection_dir"), &LTEPluginManager::get_sdk_collection_dir);
+		ClassDB::bind_method(D_METHOD("ensure_sdk_collection_dir"), &LTEPluginManager::ensure_sdk_collection_dir);
+		ClassDB::bind_method(D_METHOD("validate_sdk_path", "sdk_path"), &LTEPluginManager::validate_sdk_path);
+		ClassDB::bind_method(D_METHOD("scan_installed_sdks"), &LTEPluginManager::scan_installed_sdks);
+		ClassDB::bind_method(D_METHOD("get_installed_sdks"), &LTEPluginManager::get_installed_sdks);
+		ClassDB::bind_method(D_METHOD("register_development_sdk", "sdk_path"), &LTEPluginManager::register_development_sdk);
+		ClassDB::bind_method(D_METHOD("install_sdk_from_zip", "zip_path"), &LTEPluginManager::install_sdk_from_zip);
+		ClassDB::bind_method(D_METHOD("remove_installed_sdk", "sdk_version"), &LTEPluginManager::remove_installed_sdk);
+		ClassDB::bind_method(D_METHOD("get_default_sdk_path"), &LTEPluginManager::get_default_sdk_path);
+		ClassDB::bind_method(D_METHOD("set_default_sdk_path", "sdk_path"), &LTEPluginManager::set_default_sdk_path);
+		ClassDB::bind_method(D_METHOD("create_plugin_project", "options"), &LTEPluginManager::create_plugin_project);
+
+		ADD_SIGNAL(MethodInfo("sdk_installed", PropertyInfo(Variant::STRING, "sdk_version")));
+		ADD_SIGNAL(MethodInfo("sdk_removed", PropertyInfo(Variant::STRING, "sdk_version")));
+
 		ADD_SIGNAL(MethodInfo("plugin_installed", PropertyInfo(Variant::STRING, "plugin_id")));
 		ADD_SIGNAL(MethodInfo("plugin_uninstalled", PropertyInfo(Variant::STRING, "plugin_id")));
 		ADD_SIGNAL(MethodInfo("plugin_enabled", PropertyInfo(Variant::STRING, "plugin_id")));
@@ -60,6 +78,7 @@ namespace godot {
 		}
 		_scan_installed_plugins();
 		load_plugin_logs();
+		_load_sdk_config();
 	}
 
 	LTEPluginManager::~LTEPluginManager() {
@@ -1232,5 +1251,468 @@ namespace godot {
 			return LTEPluginManifest::compare_versions(installed_version, req) >= 0;
 		}
 		return LTEPluginManifest::compare_versions(installed_version, required_version) >= 0;
+	}
+
+	String LTEPluginManager::get_sdk_collection_dir() const {
+		return String(SDK_COLLECTION_BASE_DIR);
+	}
+
+	Error LTEPluginManager::ensure_sdk_collection_dir() const {
+		return DirAccess::make_dir_recursive_absolute(SDK_COLLECTION_BASE_DIR);
+	}
+
+	Dictionary LTEPluginManager::validate_sdk_path(const String& sdk_path) const {
+		Dictionary result;
+		Array missing;
+
+		if (!DirAccess::dir_exists_absolute(sdk_path)) {
+			result["ok"] = false;
+			result["error"] = vformat("SDK directory does not exist: %s", sdk_path);
+			return result;
+		}
+
+		const char* required_files[] = {
+			"project.godot",
+			"sdk_manifest.json",
+			"tools/init_plugin.gd",
+			"addons/lteapi/bin/lteapi.gdextension",
+			"addons/lte_plugin_template/plugin.cfg"
+		};
+
+		for (int64_t i = 0; i < 5; i++) {
+			String file_path = sdk_path.path_join(required_files[i]);
+			if (!FileAccess::file_exists(file_path)) {
+				missing.append(String(required_files[i]));
+			}
+		}
+
+		if (!missing.is_empty()) {
+			result["ok"] = false;
+			result["error"] = vformat("SDK is missing required files: %s", String(", ").join(missing));
+			result["missing"] = missing;
+			return result;
+		}
+
+		String version = _read_sdk_manifest_version(sdk_path);
+		result["ok"] = true;
+		result["version"] = version;
+		result["path"] = sdk_path;
+		return result;
+	}
+
+	Array LTEPluginManager::scan_installed_sdks() {
+		// Keep dev-registered SDKs (paths outside user://sdks/)
+		Array dev_entries;
+		for (int64_t i = 0; i < installed_sdks.size(); i++) {
+			Dictionary entry = installed_sdks[i];
+			String path = entry.get("path", "");
+			if (!path.begins_with(String(SDK_COLLECTION_BASE_DIR))) {
+				dev_entries.append(entry);
+			}
+		}
+		installed_sdks.clear();
+		for (int64_t i = 0; i < dev_entries.size(); i++) {
+			installed_sdks.append(dev_entries[i]);
+		}
+
+		if (!DirAccess::dir_exists_absolute(SDK_COLLECTION_BASE_DIR)) {
+			return installed_sdks;
+		}
+
+		Ref<DirAccess> dir = DirAccess::open(SDK_COLLECTION_BASE_DIR);
+		if (dir.is_null()) {
+			return installed_sdks;
+		}
+
+		dir->list_dir_begin();
+		String entry = dir->get_next();
+		while (!entry.is_empty()) {
+			if (entry != "." && entry != ".." && dir->current_is_dir()) {
+				Dictionary sdk_info = validate_sdk_path(String(SDK_COLLECTION_BASE_DIR).path_join(entry));
+				if (bool(sdk_info.get("ok", false))) {
+					Dictionary entry_dict;
+					entry_dict["version"] = sdk_info["version"];
+					entry_dict["path"] = String(SDK_COLLECTION_BASE_DIR).path_join(entry);
+					installed_sdks.append(entry_dict);
+				}
+			}
+			entry = dir->get_next();
+		}
+		dir->list_dir_end();
+
+		_save_sdk_config();
+		return installed_sdks;
+	}
+
+	Array LTEPluginManager::get_installed_sdks() const {
+		return installed_sdks;
+	}
+
+	Error LTEPluginManager::register_development_sdk(const String& sdk_path) {
+		Dictionary validation = validate_sdk_path(sdk_path);
+		if (!bool(validation.get("ok", false))) {
+			ERR_PRINT(String(validation.get("error", "Unknown validation error")));
+			return ERR_INVALID_PARAMETER;
+		}
+
+		String version = String(validation.get("version", ""));
+		if (version.is_empty()) {
+			ERR_PRINT("SDK manifest does not contain a version.");
+			return ERR_INVALID_PARAMETER;
+		}
+
+		String target_path = String(SDK_COLLECTION_BASE_DIR).path_join(version);
+		if (DirAccess::dir_exists_absolute(target_path) && sdk_path != target_path) {
+			WARN_PRINT(vformat("SDK version %s already installed at %s. Use --force to replace.", version, target_path));
+			return ERR_ALREADY_EXISTS;
+		}
+
+		Dictionary entry;
+		entry["version"] = version;
+		entry["path"] = sdk_path;
+
+		for (int64_t i = 0; i < installed_sdks.size(); i++) {
+			Dictionary existing = installed_sdks[i];
+			if (String(existing.get("version", "")) == version) {
+				installed_sdks[i] = entry;
+				_save_sdk_config();
+				print_line(vformat("Updated development SDK registration: %s -> %s", version, sdk_path));
+				return OK;
+			}
+		}
+
+		installed_sdks.append(entry);
+		_save_sdk_config();
+		print_line(vformat("Registered development SDK: %s at %s", version, sdk_path));
+		return OK;
+	}
+
+	Dictionary LTEPluginManager::install_sdk_from_zip(const String& zip_path) {
+		Dictionary result;
+
+		if (!FileAccess::file_exists(zip_path)) {
+			result["ok"] = false;
+			result["error"] = vformat("SDK zip not found: %s", zip_path);
+			return result;
+		}
+
+		Ref<ZIPReader> reader;
+		reader.instantiate();
+		Error open_err = reader->open(zip_path);
+		if (open_err != OK) {
+			result["ok"] = false;
+			result["error"] = vformat("Failed to open SDK zip: %s (err=%d)", zip_path, open_err);
+			return result;
+		}
+
+		PackedByteArray manifest_bytes = reader->read_file("sdk_manifest.json");
+		if (manifest_bytes.is_empty()) {
+			reader->close();
+			result["ok"] = false;
+			result["error"] = "SDK zip is missing sdk_manifest.json";
+			return result;
+		}
+
+		String manifest_text = manifest_bytes.get_string_from_utf8();
+		Ref<JSON> json;
+		json.instantiate();
+		Error parse_err = json->parse(manifest_text);
+		if (parse_err != OK) {
+			reader->close();
+			result["ok"] = false;
+			result["error"] = "Failed to parse sdk_manifest.json";
+			return result;
+		}
+
+		Dictionary manifest = json->get_data();
+		String sdk_version = manifest.get("sdk_version", "");
+		if (sdk_version.is_empty()) {
+			reader->close();
+			result["ok"] = false;
+			result["error"] = "sdk_manifest.json is missing sdk_version";
+			return result;
+		}
+
+		String staging_dir = String(SDK_COLLECTION_BASE_DIR).path_join(vformat(".staging_%d", Time::get_singleton()->get_unix_time_from_system()));
+		DirAccess::make_dir_recursive_absolute(staging_dir);
+
+		PackedStringArray files = reader->get_files();
+		for (int64_t i = 0; i < files.size(); i++) {
+			String file_path = files[i];
+			if (file_path.ends_with("/") || file_path.ends_with("\\")) {
+				DirAccess::make_dir_recursive_absolute(staging_dir.path_join(file_path));
+				continue;
+			}
+			PackedByteArray file_bytes = reader->read_file(file_path);
+			if (file_bytes.is_empty()) {
+				continue;
+			}
+			String dest_path = staging_dir.path_join(file_path);
+			String dest_parent = dest_path.get_base_dir();
+			DirAccess::make_dir_recursive_absolute(dest_parent);
+			Ref<FileAccess> out_file = FileAccess::open(dest_path, FileAccess::WRITE);
+			if (out_file.is_null()) {
+				WARN_PRINT(vformat("Failed to write SDK file: %s", file_path));
+				continue;
+			}
+			out_file->store_buffer(file_bytes);
+			out_file->close();
+		}
+		reader->close();
+
+		Dictionary staging_validation = validate_sdk_path(staging_dir);
+		if (!bool(staging_validation.get("ok", false))) {
+			_delete_dir_recursive(staging_dir);
+			result["ok"] = false;
+			result["error"] = String(staging_validation.get("error", "SDK validation failed after extraction"));
+			return result;
+		}
+
+		String target_dir = String(SDK_COLLECTION_BASE_DIR).path_join(sdk_version);
+		if (DirAccess::dir_exists_absolute(target_dir)) {
+			_delete_dir_recursive(target_dir);
+		}
+		DirAccess::make_dir_recursive_absolute(SDK_COLLECTION_BASE_DIR);
+		Error rename_err = DirAccess::rename_absolute(staging_dir, target_dir);
+		if (rename_err != OK) {
+			_delete_dir_recursive(staging_dir);
+			result["ok"] = false;
+			result["error"] = vformat("Failed to move SDK to install dir: %s (err=%d)", target_dir, rename_err);
+			return result;
+		}
+
+		Dictionary entry;
+		entry["version"] = sdk_version;
+		entry["path"] = target_dir;
+		entry["installed_at"] = Time::get_singleton()->get_unix_time_from_system();
+		entry["source"] = "zip";
+
+		for (int64_t i = 0; i < installed_sdks.size(); i++) {
+			Dictionary existing = installed_sdks[i];
+			if (String(existing.get("version", "")) == sdk_version) {
+				installed_sdks[i] = entry;
+				_save_sdk_config();
+				emit_signal("sdk_installed", sdk_version);
+				result["ok"] = true;
+				result["version"] = sdk_version;
+				result["path"] = target_dir;
+				return result;
+			}
+		}
+
+		installed_sdks.append(entry);
+		_save_sdk_config();
+		emit_signal("sdk_installed", sdk_version);
+		result["ok"] = true;
+		result["version"] = sdk_version;
+		result["path"] = target_dir;
+		return result;
+	}
+
+	Error LTEPluginManager::remove_installed_sdk(const String& sdk_version) {
+		for (int64_t i = 0; i < installed_sdks.size(); i++) {
+			Dictionary entry = installed_sdks[i];
+			if (String(entry.get("version", "")) == sdk_version) {
+				String sdk_path = entry.get("path", "");
+				if (sdk_path.begins_with(String(SDK_COLLECTION_BASE_DIR)) && DirAccess::dir_exists_absolute(sdk_path)) {
+					_delete_dir_recursive(sdk_path);
+				}
+
+				if (default_sdk_path == sdk_path) {
+					default_sdk_path = String();
+				}
+
+				installed_sdks.remove_at(i);
+				_save_sdk_config();
+				emit_signal("sdk_removed", sdk_version);
+				print_line(vformat("Removed SDK: %s", sdk_version));
+				return OK;
+			}
+		}
+		return ERR_DOES_NOT_EXIST;
+	}
+
+	String LTEPluginManager::get_default_sdk_path() const {
+		if (!default_sdk_path.is_empty()) {
+			Dictionary validation = validate_sdk_path(default_sdk_path);
+			if (bool(validation.get("ok", false))) {
+				return default_sdk_path;
+			}
+		}
+
+		if (!installed_sdks.is_empty()) {
+			Dictionary entry = installed_sdks[installed_sdks.size() - 1];
+			return String(entry.get("path", ""));
+		}
+
+		return String();
+	}
+
+	Error LTEPluginManager::set_default_sdk_path(const String& sdk_path) {
+		if (!sdk_path.is_empty()) {
+			Dictionary validation = validate_sdk_path(sdk_path);
+			if (!bool(validation.get("ok", false))) {
+				ERR_PRINT(String(validation.get("error", "Invalid SDK path")));
+				return ERR_INVALID_PARAMETER;
+			}
+		}
+		default_sdk_path = sdk_path;
+		_save_sdk_config();
+		return OK;
+	}
+
+	Dictionary LTEPluginManager::create_plugin_project(const Dictionary& options) const {
+		Dictionary result;
+
+		String godot_path = options.get("godot_path", "");
+		String sdk_path = options.get("sdk_path", "");
+		String plugin_id = options.get("plugin_id", "");
+		String plugin_name = options.get("plugin_name", "");
+		String author = options.get("author", "");
+		String description = options.get("description", "");
+		String output_path = options.get("output_path", "");
+
+		if (godot_path.is_empty()) {
+			result["ok"] = false;
+			result["error"] = "godot_path is required";
+			return result;
+		}
+		if (sdk_path.is_empty()) {
+			sdk_path = get_default_sdk_path();
+			if (sdk_path.is_empty()) {
+				result["ok"] = false;
+				result["error"] = "No SDK configured. Install an SDK first.";
+				return result;
+			}
+		}
+		if (plugin_id.is_empty()) {
+			result["ok"] = false;
+			result["error"] = "plugin_id is required";
+			return result;
+		}
+		if (plugin_name.is_empty()) {
+			result["ok"] = false;
+			result["error"] = "plugin_name is required";
+			return result;
+		}
+		if (output_path.is_empty()) {
+			result["ok"] = false;
+			result["error"] = "output_path is required";
+			return result;
+		}
+
+		Dictionary validation = validate_sdk_path(sdk_path);
+		if (!bool(validation.get("ok", false))) {
+			result["ok"] = false;
+			result["error"] = String(validation.get("error", "SDK validation failed"));
+			return result;
+		}
+
+		PackedStringArray args;
+		args.append("--headless");
+		args.append("--path");
+		args.append(sdk_path);
+		args.append("--script");
+		args.append("res://tools/init_plugin.gd");
+		args.append("--");
+		args.append("--plugin-id");
+		args.append(plugin_id);
+		args.append("--plugin-name");
+		args.append(plugin_name);
+		args.append("--author");
+		args.append(author);
+		if (!description.is_empty()) {
+			args.append("--description");
+			args.append(description);
+		}
+		args.append("--output");
+		args.append(output_path);
+
+		int exit_code = -1;
+		Array output;
+		int exec_err = OS::get_singleton()->execute(godot_path, args, output, &exit_code, true);
+
+		if (exec_err != 0) {
+			result["ok"] = false;
+			result["error"] = vformat("Failed to execute Godot: %s (err=%d)", godot_path, exec_err);
+			result["output"] = output;
+			result["exit_code"] = exit_code;
+			return result;
+		}
+
+		result["ok"] = (exit_code == 0);
+		result["output"] = output;
+		result["exit_code"] = exit_code;
+		result["output_path"] = output_path;
+
+		if (exit_code == 0) {
+			print_line(vformat("Plugin project created: %s -> %s", plugin_id, output_path));
+		}
+		else {
+			result["error"] = vformat("init_plugin.gd exited with code %d", exit_code);
+		}
+
+		return result;
+	}
+
+	void LTEPluginManager::_load_sdk_config() {
+		installed_sdks.clear();
+		default_sdk_path = String();
+
+		if (!FileAccess::file_exists(SDK_MANAGER_CONFIG_PATH)) {
+			return;
+		}
+
+		Ref<ConfigFile> cfg;
+		cfg.instantiate();
+		Error err = cfg->load(SDK_MANAGER_CONFIG_PATH);
+		if (err != OK) {
+			return;
+		}
+
+		default_sdk_path = cfg->get_value("sdk", "default_path", "");
+
+		Array sdk_list = cfg->get_value("sdk", "installed", Array());
+		for (int64_t i = 0; i < sdk_list.size(); i++) {
+			Variant item = sdk_list[i];
+			if (item.get_type() == Variant::DICTIONARY) {
+				installed_sdks.append(Dictionary(item));
+			}
+		}
+	}
+
+	void LTEPluginManager::_save_sdk_config() const {
+		Ref<ConfigFile> cfg;
+		cfg.instantiate();
+
+		cfg->set_value("sdk", "default_path", default_sdk_path);
+		cfg->set_value("sdk", "installed", installed_sdks);
+
+		cfg->save(SDK_MANAGER_CONFIG_PATH);
+	}
+
+	String LTEPluginManager::_read_sdk_manifest_version(const String& sdk_path) const {
+		String manifest_path = sdk_path.path_join("sdk_manifest.json");
+		if (!FileAccess::file_exists(manifest_path)) {
+			return String();
+		}
+
+		Ref<FileAccess> file = FileAccess::open(manifest_path, FileAccess::READ);
+		if (file.is_null()) {
+			return String();
+		}
+
+		String content = file->get_as_text();
+		file->close();
+
+		Ref<JSON> json;
+		json.instantiate();
+		Error err = json->parse(content);
+		if (err != OK) {
+			return String();
+		}
+
+		Dictionary data = json->get_data();
+		return String(data.get("sdk_version", ""));
 	}
 }
