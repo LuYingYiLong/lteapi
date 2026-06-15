@@ -1355,11 +1355,30 @@ namespace godot {
 			return result;
 		}
 
-		PackedByteArray manifest_bytes = reader->read_file("sdk_manifest.json");
-		if (manifest_bytes.is_empty()) {
+		// Find sdk_manifest.json at any depth (GitHub archives wrap in a top-level folder)
+		PackedStringArray all_files = reader->get_files();
+		String manifest_path;
+		String prefix;
+		for (int64_t i = 0; i < all_files.size(); i++) {
+			String f = all_files[i];
+			if (f == "sdk_manifest.json" || f.ends_with("/sdk_manifest.json")) {
+				manifest_path = f;
+				prefix = (f == "sdk_manifest.json") ? String() : f.substr(0, f.length() - String("sdk_manifest.json").length());
+				break;
+			}
+		}
+		if (manifest_path.is_empty()) {
 			reader->close();
 			result["ok"] = false;
 			result["error"] = "SDK zip is missing sdk_manifest.json";
+			return result;
+		}
+
+		PackedByteArray manifest_bytes = reader->read_file(manifest_path);
+		if (manifest_bytes.is_empty()) {
+			reader->close();
+			result["ok"] = false;
+			result["error"] = "Failed to read sdk_manifest.json from zip";
 			return result;
 		}
 
@@ -1386,18 +1405,25 @@ namespace godot {
 		String staging_dir = String(SDK_COLLECTION_BASE_DIR).path_join(vformat(".staging_%d", Time::get_singleton()->get_unix_time_from_system()));
 		DirAccess::make_dir_recursive_absolute(staging_dir);
 
-		PackedStringArray files = reader->get_files();
-		for (int64_t i = 0; i < files.size(); i++) {
-			String file_path = files[i];
+		for (int64_t i = 0; i < all_files.size(); i++) {
+			String file_path = all_files[i];
+			// Strip common top-level prefix so extracted layout matches SDK root
+			String relative_path = file_path;
+			if (!prefix.is_empty() && file_path.begins_with(prefix)) {
+				relative_path = file_path.substr(prefix.length());
+			}
+			if (relative_path.is_empty()) {
+				continue;
+			}
 			if (file_path.ends_with("/") || file_path.ends_with("\\")) {
-				DirAccess::make_dir_recursive_absolute(staging_dir.path_join(file_path));
+				DirAccess::make_dir_recursive_absolute(staging_dir.path_join(relative_path));
 				continue;
 			}
 			PackedByteArray file_bytes = reader->read_file(file_path);
 			if (file_bytes.is_empty()) {
 				continue;
 			}
-			String dest_path = staging_dir.path_join(file_path);
+			String dest_path = staging_dir.path_join(relative_path);
 			String dest_parent = dest_path.get_base_dir();
 			DirAccess::make_dir_recursive_absolute(dest_parent);
 			Ref<FileAccess> out_file = FileAccess::open(dest_path, FileAccess::WRITE);
