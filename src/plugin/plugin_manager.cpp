@@ -87,6 +87,7 @@ namespace godot {
 		_scan_installed_plugins();
 		load_plugin_logs();
 		_load_sdk_config();
+		_cleanup_stale_sdk_downloads();
 
 		_sdk_download_state["active"] = false;
 		_sdk_download_state["state"] = "idle";
@@ -1750,6 +1751,11 @@ namespace godot {
 		_sdk_download_final_zip_path = downloads_dir.path_join(vformat("lte-sdk-%d.zip", ticks));
 
 		_ensure_sdk_download_request();
+		if (_sdk_download_request == nullptr) {
+			result["ok"] = false;
+			result["error"] = "SDK_DOWNLOAD_REQUEST_FAILED_NAME";
+			return result;
+		}
 
 		_sdk_download_state["active"] = true;
 		_sdk_download_state["state"] = "downloading";
@@ -1776,7 +1782,11 @@ namespace godot {
 		return result;
 	}
 
-	Dictionary LTEPluginManager::get_sdk_download_state() const {
+	Dictionary LTEPluginManager::get_sdk_download_state() {
+		if (bool(_sdk_download_state["active"]) && _sdk_download_request != nullptr) {
+			_sdk_download_state["downloaded_bytes"] = (int64_t)_sdk_download_request->get_downloaded_bytes();
+			_sdk_download_state["total_bytes"] = (int64_t)_sdk_download_request->get_body_size();
+		}
 		return _sdk_download_state;
 	}
 
@@ -1798,8 +1808,18 @@ namespace godot {
 			return;
 		}
 
-		SceneTree *tree = Object::cast_to<SceneTree>(Engine::get_singleton()->get_main_loop());
+		MainLoop *loop = Engine::get_singleton()->get_main_loop();
+		if (loop == nullptr) {
+			return;
+		}
+
+		SceneTree *tree = Object::cast_to<SceneTree>(loop);
 		if (tree == nullptr) {
+			return;
+		}
+
+		Window *root = tree->get_root();
+		if (root == nullptr) {
 			return;
 		}
 
@@ -1808,7 +1828,7 @@ namespace godot {
 		_sdk_download_request->set_timeout(0.0);
 		_sdk_download_request->connect("request_completed",
 			Callable(this, "_sdk_download_request_completed"));
-		tree->get_root()->add_child(_sdk_download_request);
+		root->add_child(_sdk_download_request);
 	}
 
 	void LTEPluginManager::_sdk_download_request_completed(int result, int response_code, const PackedStringArray& headers, const PackedByteArray& body) {

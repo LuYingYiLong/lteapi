@@ -132,7 +132,7 @@ namespace godot {
 
 		// Background SDK download
 		Dictionary start_sdk_download(const String& url);
-		Dictionary get_sdk_download_state() const;
+		Dictionary get_sdk_download_state();
 		void cancel_sdk_download();
 	};
 }
