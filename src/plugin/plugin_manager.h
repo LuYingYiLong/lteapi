@@ -11,6 +11,7 @@
 #include <godot_cpp/classes/gd_script.hpp>
 #include <godot_cpp/classes/http_request.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
+#include <godot_cpp/classes/window.hpp>
 #include <godot_cpp/templates/hash_map.hpp>
 
 #include "zip_helper.h"
@@ -36,7 +37,7 @@ namespace godot {
 		String default_sdk_path;
 
 		// Background SDK download state
-		HTTPRequest *_sdk_download_request = nullptr;
+		HTTPRequest* _sdk_download_request = nullptr;
 		Dictionary _sdk_download_state;
 		String _sdk_download_partial_path;
 		String _sdk_download_final_zip_path;
@@ -70,6 +71,7 @@ namespace godot {
 		void _load_sdk_config();
 		void _save_sdk_config() const;
 		String _read_sdk_manifest_version(const String& sdk_path) const;
+		Error _copy_sdk_project(const String& source_path, const String& target_path);
 
 		void _ensure_sdk_download_request();
 		void _emit_sdk_download_state();
@@ -128,7 +130,7 @@ namespace godot {
 		Error remove_installed_sdk(const String& sdk_version);
 		String get_default_sdk_path() const;
 		Error set_default_sdk_path(const String& sdk_path);
-		Dictionary create_plugin_project(const Dictionary& options) const;
+		Dictionary create_plugin_project(const Dictionary& options);
 
 		// Background SDK download
 		Dictionary start_sdk_download(const String& url);

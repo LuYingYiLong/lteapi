@@ -50,6 +50,11 @@ namespace godot {
 		void clear_cache();
 
 		void unregister_all();
+
+	// ——— Chart data API ———
+	Array get_chart_notes(const String& uuid, const String& chart_path);
+	Array validate_notes(const Array& notes);
+	Dictionary make_note_patch(const Array& old_notes, const Array& new_notes);
 	};
 }
 

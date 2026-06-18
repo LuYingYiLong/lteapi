@@ -4,8 +4,12 @@
 #include "backup_server.h"
 #include "component_registry.h"
 #include "composition_server.h"
+#include "scene_layers_server.h"
 #include "helpers/composition_signature_helper.h"
 #include "helpers/composition_patch_helper.h"
+#include "helpers/lte_chart_note_helper.h"
+#include "helpers/lte_chart_analysis_helper.h"
+#include "helpers/lte_speed_curve_helper.h"
 #include "file_system_server.h"
 #include "file_save_server.h"
 #include "graph_editor_server.h"
@@ -60,8 +64,12 @@ namespace godot {
 		source_monitor_server = memnew(LTESourceMonitorServer);
 		properties_server = memnew(LTEPropertiesServer);
 		composition_server = memnew(LTECompositionServer);
+		scene_layers_server = memnew(LTESceneLayersServer);
 		composition_signature_helper = memnew(LTECompositionSignatureHelper);
 		composition_patch_helper = memnew(LTECompositionPatchHelper);
+		chart_note_helper = memnew(LTEChartNoteHelper);
+		chart_analysis_helper = memnew(LTEChartAnalysisHelper);
+		speed_curve_helper = memnew(LTESpeedCurveHelper);
 		hotkey_tip_server = memnew(LTEHotkeyTipServer);
 		shader_server = memnew(LTEShaderServer);
 		audio_visualizer_server = memnew(LTEAudioVisualizerServer);
@@ -90,6 +98,22 @@ namespace godot {
 		if (composition_signature_helper) {
 			memdelete(composition_signature_helper);
 			composition_signature_helper = nullptr;
+		}
+		if (chart_note_helper) {
+			memdelete(chart_note_helper);
+			chart_note_helper = nullptr;
+		}
+		if (chart_analysis_helper) {
+			memdelete(chart_analysis_helper);
+			chart_analysis_helper = nullptr;
+		}
+		if (speed_curve_helper) {
+			memdelete(speed_curve_helper);
+			speed_curve_helper = nullptr;
+		}
+		if (scene_layers_server) {
+			memdelete(scene_layers_server);
+			scene_layers_server = nullptr;
 		}
 		if (composition_server) {
 			memdelete(composition_server);
@@ -261,7 +285,11 @@ namespace godot {
 		return file_save_server;
 	}
 
-	LTECompositionServer* LTEAPI::get_composition_server() const {
+	
+	LTESceneLayersServer* LTEAPI::get_scene_layers_server() const {
+		return scene_layers_server;
+	}
+LTECompositionServer* LTEAPI::get_composition_server() const {
 		return composition_server;
 	}
 
@@ -295,5 +323,17 @@ namespace godot {
 
 	LTECompositionPatchHelper* LTEAPI::get_composition_patch_helper() const {
 		return composition_patch_helper;
+	}
+
+	LTEChartNoteHelper* LTEAPI::get_chart_note_helper() const {
+		return chart_note_helper;
+	}
+
+	LTEChartAnalysisHelper* LTEAPI::get_chart_analysis_helper() const {
+		return chart_analysis_helper;
+	}
+
+	LTESpeedCurveHelper* LTEAPI::get_speed_curve_helper() const {
+		return speed_curve_helper;
 	}
 }

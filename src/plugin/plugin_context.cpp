@@ -1,5 +1,7 @@
 #include "plugin_context.h"
 #include "component_registry.h"
+#include "helpers/lte_chart_note_helper.h"
+#include "server/timeline_server.h"
 
 #include <godot_cpp/classes/config_file.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
@@ -23,6 +25,9 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("get_cache_dir"), &LTEPluginContext::get_cache_dir);
 		ClassDB::bind_method(D_METHOD("clear_cache"), &LTEPluginContext::clear_cache);
 		ClassDB::bind_method(D_METHOD("unregister_all"), &LTEPluginContext::unregister_all);
+	ClassDB::bind_method(D_METHOD("get_chart_notes", "uuid", "chart_path"), &LTEPluginContext::get_chart_notes);
+	ClassDB::bind_method(D_METHOD("validate_notes", "notes"), &LTEPluginContext::validate_notes);
+	ClassDB::bind_method(D_METHOD("make_note_patch", "old_notes", "new_notes"), &LTEPluginContext::make_note_patch);
 	}
 
 	LTEPluginContext::LTEPluginContext() {
@@ -269,5 +274,86 @@ namespace godot {
 			}
 		}
 		registrations.clear();
+	}
+
+	// ——— Chart data API ———
+
+	Array LTEPluginContext::get_chart_notes(const String& uuid, const String& chart_path) {
+		LTETimelineServer* ts = LTETimelineServer::get_singleton();
+		if (!ts) {
+			return Array();
+		}
+		Dictionary opened = ts->find_opened_chart_info(uuid, chart_path);
+		Dictionary chart = opened.get("chart", Dictionary());
+		return chart.get("note", Array());
+	}
+
+	Array LTEPluginContext::validate_notes(const Array& notes) {
+		Array diagnostics;
+		LTEChartNoteHelper* helper = LTEChartNoteHelper::get_singleton();
+		if (!helper) {
+			return diagnostics;
+		}
+
+		// 重叠检测
+		Array overlaps = helper->find_overlaps(notes);
+		for (int32_t i = 0; i < overlaps.size(); ++i) {
+			Dictionary ov = overlaps[i];
+			Dictionary diag;
+			diag["level"] = "warning";
+			diag["code"] = "note_overlap";
+			diag["message"] = "Same track has overlapping notes.";
+			diag["index_a"] = ov.get("index_a", -1);
+			diag["index_b"] = ov.get("index_b", -1);
+			diagnostics.append(diag);
+		}
+
+		// 基本合法性检查
+		for (int32_t i = 0; i < notes.size(); ++i) {
+			if (notes[i].get_type() != Variant::DICTIONARY) {
+				continue;
+			}
+			Dictionary note = notes[i];
+			String type = note.get("type", "tap");
+			int32_t key = static_cast<int32_t>(note.get("key", -1));
+			if (key < 0) {
+				Dictionary diag;
+				diag["level"] = "error";
+				diag["code"] = "note_key_missing";
+				diag["message"] = "Note key is missing or negative.";
+				diag["index"] = i;
+				diagnostics.append(diag);
+			}
+			if (type == String("hold")) {
+				double start_beat = static_cast<double>(note.get("start_beat", 0.0));
+				double end_beat = static_cast<double>(note.get("end_beat", 0.0));
+				if (end_beat <= start_beat) {
+					Dictionary diag;
+					diag["level"] = "error";
+					diag["code"] = "hold_time_invalid";
+					diag["message"] = "Hold end_beat must be greater than start_beat.";
+					diag["index"] = i;
+					diag["key"] = key;
+					diagnostics.append(diag);
+				}
+			}
+		}
+		return diagnostics;
+	}
+
+	Dictionary LTEPluginContext::make_note_patch(const Array& old_notes, const Array& new_notes) {
+		LTEChartNoteHelper* helper = LTEChartNoteHelper::get_singleton();
+		Dictionary result;
+		result["type"] = "note_patch";
+		if (helper) {
+			Dictionary delta = helper->make_note_delta(old_notes, new_notes);
+			result["added"] = delta.get("added", Array());
+			result["removed"] = delta.get("removed", Array());
+		} else {
+			result["added"] = Array();
+			result["removed"] = Array();
+		}
+		result["diagnostics"] = validate_notes(new_notes);
+		return result;
 	}
 }

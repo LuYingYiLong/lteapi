@@ -23,6 +23,7 @@ namespace godot {
 	class LTEProjectManager;
 	class LTEUndoRedo;
 	class LTECompositionServer;
+		class LTESceneLayersServer;
 	class LTEHotkeyTipServer;
 	class LTEShaderServer;
 	class LTEAudioVisualizerServer;
@@ -31,6 +32,9 @@ namespace godot {
 	class LTEUser;
 	class LTECompositionSignatureHelper;
 	class LTECompositionPatchHelper;
+	class LTEChartNoteHelper;
+	class LTEChartAnalysisHelper;
+	class LTESpeedCurveHelper;
 
 	class LTEAPI : public Object {
 		GDCLASS(LTEAPI, Object)
@@ -54,6 +58,7 @@ namespace godot {
 		LTEFileSaveServer* file_save_server = nullptr;
 		LTEProjectManager* project_manager = nullptr;
 		LTECompositionServer* composition_server = nullptr;
+			LTESceneLayersServer* scene_layers_server = nullptr;
 		LTEHotkeyTipServer* hotkey_tip_server = nullptr;
 		LTEShaderServer* shader_server = nullptr;
 		LTEAudioVisualizerServer* audio_visualizer_server = nullptr;
@@ -62,6 +67,9 @@ namespace godot {
 		LTEUser* user = nullptr;
 		LTECompositionSignatureHelper* composition_signature_helper = nullptr;
 		LTECompositionPatchHelper* composition_patch_helper = nullptr;
+		LTEChartNoteHelper* chart_note_helper = nullptr;
+		LTEChartAnalysisHelper* chart_analysis_helper = nullptr;
+		LTESpeedCurveHelper* speed_curve_helper = nullptr;
 
 	protected:
 		static void _bind_methods();
@@ -94,6 +102,7 @@ namespace godot {
 		LTEFileSystemServer* get_file_system_server() const;
 		LTEFileSaveServer* get_file_save_server() const;
 		LTECompositionServer* get_composition_server() const;
+			LTESceneLayersServer* get_scene_layers_server() const;
 		LTEHotkeyTipServer* get_hotkey_tip_server() const;
 		LTEShaderServer* get_shader_server() const;
 		LTEAudioVisualizerServer* get_audio_visualizer_server() const;
@@ -102,6 +111,9 @@ namespace godot {
 		LTEUser* get_user() const;
 		LTECompositionSignatureHelper* get_composition_signature_helper() const;
 		LTECompositionPatchHelper* get_composition_patch_helper() const;
+		LTEChartNoteHelper* get_chart_note_helper() const;
+		LTEChartAnalysisHelper* get_chart_analysis_helper() const;
+		LTESpeedCurveHelper* get_speed_curve_helper() const;
 	};
 }
 

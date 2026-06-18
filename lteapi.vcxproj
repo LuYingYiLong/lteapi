@@ -72,10 +72,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>godot-cpp\gdextension;godot-cpp\include;godot-cpp\gen\include;src;src\plugin;src\server;src\resource;src\editor;src\util;src\classes;src\controls</IncludePath>
+    <IncludePath>godot-cpp\gdextension;godot-cpp\include;godot-cpp\gen\include;src;src\plugin;src\server;src\resource;src\editor;src\util;src\classes;src\controls;src\helpers</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>godot-cpp\gdextension;godot-cpp\include;godot-cpp\gen\include;src;src\plugin;src\server;src\resource;src\editor;src\util;src\classes;src\controls</IncludePath>
+    <IncludePath>godot-cpp\gdextension;godot-cpp\include;godot-cpp\gen\include;src;src\plugin;src\server;src\resource;src\editor;src\util;src\classes;src\controls;src\helpers</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -135,6 +135,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\controls\confirm_dialog.h" />
+    <ClInclude Include="src\controls\stauts_label.h" />
     <ClInclude Include="src\editor\note_skin_editor_plugin.h" />
     <ClInclude Include="src\editor\note_skin_importer.h" />
     <ClInclude Include="src\server\backup_server.h" />
@@ -170,9 +171,15 @@
     <ClInclude Include="src\server\timeline_server.h" />
     <ClInclude Include="src\util\utils.h" />
     <ClInclude Include="src\util\zip_helper.h" />
+    <ClInclude Include="src\helpers\composition_patch_helper.h" />
+    <ClInclude Include="src\helpers\composition_signature_helper.h" />
+    <ClInclude Include="src\helpers\lte_chart_note_helper.h" />
+    <ClInclude Include="src\helpers\lte_chart_analysis_helper.h" />
+    <ClInclude Include="src\helpers\lte_speed_curve_helper.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\controls\confirm_dialog.cpp" />
+    <ClCompile Include="src\controls\stauts_label.cpp" />
     <ClCompile Include="src\editor\note_skin_editor_plugin.cpp" />
     <ClCompile Include="src\editor\note_skin_importer.cpp" />
     <ClCompile Include="src\server\backup_server.cpp" />
@@ -205,6 +212,11 @@
     <ClCompile Include="src\server\timeline_server.cpp" />
     <ClCompile Include="src\util\utils.cpp" />
     <ClCompile Include="src\util\zip_helper.cpp" />
+    <ClCompile Include="src\helpers\composition_patch_helper.cpp" />
+    <ClCompile Include="src\helpers\composition_signature_helper.cpp" />
+    <ClCompile Include="src\helpers\lte_chart_note_helper.cpp" />
+    <ClCompile Include="src\helpers\lte_chart_analysis_helper.cpp" />
+    <ClCompile Include="src\helpers\lte_speed_curve_helper.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

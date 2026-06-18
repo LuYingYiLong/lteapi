@@ -264,6 +264,7 @@ namespace godot {
 			timeline_panel_note_group_colors = file->get_value("timeline_panel", "note_group_colors", Dictionary());
 			composition_timeline_scene_settings = file->get_value("composition_timeline", "scene_settings", Dictionary());
 			composition_timeline_last_opened = file->get_value("composition_timeline", "last_opened", Dictionary());
+				scene_layers_settings = file->get_value("scene_layers_panel", "scene_settings", Dictionary());
 			graph_editor_playhead_auto_scroll = file->get_value("graph_editor", "playhead_auto_scroll", Dictionary());
 			graph_editor_view_settings = file->get_value("graph_editor", "view_settings", Dictionary());
 			audio_visualizer_configs = file->get_value("audio_visualizer", "configs", Dictionary());
@@ -295,6 +296,7 @@ namespace godot {
 			timeline_panel_note_group_colors = convert_project_path_dictionary(timeline_panel_note_group_colors, true);
 			composition_timeline_scene_settings = convert_project_path_dictionary(composition_timeline_scene_settings, true);
 			composition_timeline_last_opened = convert_project_path_dictionary(composition_timeline_last_opened, true);
+				scene_layers_settings = convert_project_path_dictionary(scene_layers_settings, true);
 			graph_editor_view_settings = convert_project_path_dictionary(graph_editor_view_settings, true);
 			audio_visualizer_configs = convert_project_path_dictionary(audio_visualizer_configs, true);
 			audio_preview_chart_settings = convert_project_path_dictionary(audio_preview_chart_settings, true);
@@ -341,6 +343,7 @@ namespace godot {
 		file->set_value("timeline_panel", "note_group_colors", convert_project_path_dictionary(timeline_panel_note_group_colors, false));
 		file->set_value("composition_timeline", "scene_settings", convert_project_path_dictionary(composition_timeline_scene_settings, false));
 		file->set_value("composition_timeline", "last_opened", convert_project_path_dictionary(composition_timeline_last_opened, false));
+				file->set_value("scene_layers_panel", "scene_settings", convert_project_path_dictionary(scene_layers_settings, false));
 		file->set_value("graph_editor", "playhead_auto_scroll", graph_editor_playhead_auto_scroll);
 		file->set_value("graph_editor", "view_settings", convert_project_path_dictionary(graph_editor_view_settings, false));
 		file->set_value("audio_visualizer", "configs", convert_project_path_dictionary(audio_visualizer_configs, false));
@@ -403,6 +406,7 @@ namespace godot {
 		changed = remove_unused_uuid_entries(timeline_panel_chart_scroll_position, uuids) || changed;
 		changed = remove_unused_uuid_entries(composition_timeline_scene_settings, uuids) || changed;
 		changed = remove_unused_uuid_entries(composition_timeline_last_opened, uuids) || changed;
+				changed = remove_unused_uuid_entries(scene_layers_settings, uuids) || changed;
 		changed = remove_unused_uuid_entries(graph_editor_playhead_auto_scroll, uuids) || changed;
 		changed = remove_unused_uuid_entries(graph_editor_view_settings, uuids) || changed;
 		changed = remove_unused_uuid_entries(audio_visualizer_configs, uuids) || changed;

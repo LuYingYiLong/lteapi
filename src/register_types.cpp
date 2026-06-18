@@ -12,6 +12,7 @@
 #include "controls/editor_panel_container.h"
 #include "controls/confirm_dialog.h"
 #include "controls/panel_option_button.h"
+#include "controls/stauts_label.h"
 #include "controls/time_scrubber.h"
 #include "utils.h"
 #include "chart_helper.h"
@@ -20,8 +21,12 @@
 #include "shader_server.h"
 #include "component_registry.h"
 #include "composition_server.h"
+#include "scene_layers_server.h"
 #include "helpers/composition_signature_helper.h"
 #include "helpers/composition_patch_helper.h"
+#include "helpers/lte_chart_note_helper.h"
+#include "helpers/lte_chart_analysis_helper.h"
+#include "helpers/lte_speed_curve_helper.h"
 #include "preferences_manager.h"
 #include "plugin_manager.h"
 #include "project_manager.h"
@@ -105,6 +110,7 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(EditorPanelContainer);
 	GDREGISTER_CLASS(LTEConfirmDialog);
 	GDREGISTER_CLASS(PanelOptionButton);
+	GDREGISTER_CLASS(StautsLabel);
 	GDREGISTER_CLASS(TimeScrubber);
 	GDREGISTER_CLASS(LTESettingsConfig);
 	GDREGISTER_CLASS(LTEComponentRegistry);
@@ -120,8 +126,12 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(LTEFileSystemServer);
 	GDREGISTER_CLASS(LTEFileSaveServer);
 	GDREGISTER_CLASS(LTECompositionServer);
+	GDREGISTER_CLASS(LTESceneLayersServer);
 	GDREGISTER_CLASS(LTECompositionSignatureHelper);
 	GDREGISTER_CLASS(LTECompositionPatchHelper);
+	GDREGISTER_CLASS(LTEChartNoteHelper);
+	GDREGISTER_CLASS(LTEChartAnalysisHelper);
+	GDREGISTER_CLASS(LTESpeedCurveHelper);
 	GDREGISTER_CLASS(LTEHotkeyTipServer);
 	GDREGISTER_CLASS(LTEShaderServer);
 	GDREGISTER_CLASS(LTEAudioVisualizerServer);
@@ -150,8 +160,12 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	Engine::get_singleton()->register_singleton("LTEFileSystemServer", lte_api_instance->get_file_system_server());
 	Engine::get_singleton()->register_singleton("LTEFileSaveServer", lte_api_instance->get_file_save_server());
 	Engine::get_singleton()->register_singleton("LTECompositionServer", lte_api_instance->get_composition_server());
+	Engine::get_singleton()->register_singleton("LTESceneLayersServer", lte_api_instance->get_scene_layers_server());
 	Engine::get_singleton()->register_singleton("LTECompositionSignatureHelper", lte_api_instance->get_composition_signature_helper());
 	Engine::get_singleton()->register_singleton("LTECompositionPatchHelper", lte_api_instance->get_composition_patch_helper());
+	Engine::get_singleton()->register_singleton("LTEChartNoteHelper", lte_api_instance->get_chart_note_helper());
+	Engine::get_singleton()->register_singleton("LTEChartAnalysisHelper", lte_api_instance->get_chart_analysis_helper());
+	Engine::get_singleton()->register_singleton("LTESpeedCurveHelper", lte_api_instance->get_speed_curve_helper());
 	Engine::get_singleton()->register_singleton("LTEHotkeyTipServer", lte_api_instance->get_hotkey_tip_server());
 	Engine::get_singleton()->register_singleton("LTEShaderServer", lte_api_instance->get_shader_server());
 	Engine::get_singleton()->register_singleton("LTEAudioVisualizerServer", lte_api_instance->get_audio_visualizer_server());
@@ -185,6 +199,10 @@ void uninitialize_example_module(ModuleInitializationLevel p_level) {
 		Engine::get_singleton()->unregister_singleton("LTEHotkeyTipServer");
 		Engine::get_singleton()->unregister_singleton("LTECompositionPatchHelper");
 		Engine::get_singleton()->unregister_singleton("LTECompositionSignatureHelper");
+		Engine::get_singleton()->unregister_singleton("LTEChartNoteHelper");
+		Engine::get_singleton()->unregister_singleton("LTEChartAnalysisHelper");
+		Engine::get_singleton()->unregister_singleton("LTESpeedCurveHelper");
+				Engine::get_singleton()->unregister_singleton("LTESceneLayersServer");
 		Engine::get_singleton()->unregister_singleton("LTECompositionServer");
 		Engine::get_singleton()->unregister_singleton("LTEFileSaveServer");
 		Engine::get_singleton()->unregister_singleton("LTEFileSystemServer");

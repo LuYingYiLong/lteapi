@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory)]
     [string]$Target,
-    [string]$Source = $PSScriptRoot | Split-Path -Parent
+    [string]$Source = (Split-Path -Parent $PSScriptRoot)
 )
 
 $ErrorActionPreference = "Stop"

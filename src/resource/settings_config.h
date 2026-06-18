@@ -52,6 +52,8 @@ namespace godot {
 		Dictionary composition_timeline_scene_settings;
 		Dictionary composition_timeline_last_opened;
 
+		Dictionary scene_layers_settings;
+
 		Dictionary graph_editor_playhead_auto_scroll;
 		Dictionary graph_editor_view_settings;
 

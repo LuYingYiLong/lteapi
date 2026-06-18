@@ -43,17 +43,23 @@
     <Filter Include="Header File\classes">
       <UniqueIdentifier>{7320413c-67d0-48f2-a585-fef6b4d6eadb}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source File\control">
-      <UniqueIdentifier>{6513d2eb-11fb-472a-a934-c6356adfa4c4}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Header File\control">
-      <UniqueIdentifier>{a339f46a-5840-46f5-90f1-03f839f89eee}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source File\utils">
       <UniqueIdentifier>{7ff4ec36-c45e-428b-a54d-379909c2a837}</UniqueIdentifier>
     </Filter>
     <Filter Include="Header File\utils">
       <UniqueIdentifier>{6c8e203a-5d04-4d38-8445-faf4459a7cd1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header File\controls">
+      <UniqueIdentifier>{a339f46a-5840-46f5-90f1-03f839f89eee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source File\controls">
+      <UniqueIdentifier>{6513d2eb-11fb-472a-a934-c6356adfa4c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header File\helpers">
+      <UniqueIdentifier>{d1e2f3a4-b5c6-7890-abcd-ef1234567890}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source File\helpers">
+      <UniqueIdentifier>{e2f3a4b5-c6d7-8901-bcde-f12345678901}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -75,8 +81,20 @@
     <ClInclude Include="src\plugin\plugin_base.h">
       <Filter>Header File\plugin</Filter>
     </ClInclude>
+    <ClInclude Include="src\plugin\plugin_context.h">
+      <Filter>Header File\plugin</Filter>
+    </ClInclude>
+    <ClInclude Include="src\plugin\plugin_manifest.h">
+      <Filter>Header File\plugin</Filter>
+    </ClInclude>
     <ClInclude Include="src\plugin\plugin_manager.h">
       <Filter>Header File\plugin</Filter>
+    </ClInclude>
+    <ClInclude Include="src\plugin\plugin_runtime.h">
+      <Filter>Header File\plugin</Filter>
+    </ClInclude>
+    <ClInclude Include="src\server\audio_visualizer_server.h">
+      <Filter>Header File\server</Filter>
     </ClInclude>
     <ClInclude Include="src\server\backup_server.h">
       <Filter>Header File\server</Filter>
@@ -87,13 +105,22 @@
     <ClInclude Include="src\server\composition_server.h">
       <Filter>Header File\server</Filter>
     </ClInclude>
+    <ClInclude Include="src\server\file_save_server.h">
+      <Filter>Header File\server</Filter>
+    </ClInclude>
     <ClInclude Include="src\server\file_system_server.h">
+      <Filter>Header File\server</Filter>
+    </ClInclude>
+    <ClInclude Include="src\server\graph_editor_server.h">
       <Filter>Header File\server</Filter>
     </ClInclude>
     <ClInclude Include="src\server\hotkey_tip_server.h">
       <Filter>Header File\server</Filter>
     </ClInclude>
     <ClInclude Include="src\server\lte_user.h">
+      <Filter>Header File\server</Filter>
+    </ClInclude>
+    <ClInclude Include="src\server\note_skin_server.h">
       <Filter>Header File\server</Filter>
     </ClInclude>
     <ClInclude Include="src\server\preferences_manager.h">
@@ -103,6 +130,9 @@
       <Filter>Header File\server</Filter>
     </ClInclude>
     <ClInclude Include="src\server\properties_server.h">
+      <Filter>Header File\server</Filter>
+    </ClInclude>
+    <ClInclude Include="src\server\shader_server.h">
       <Filter>Header File\server</Filter>
     </ClInclude>
     <ClInclude Include="src\server\source_monitor_server.h">
@@ -116,6 +146,9 @@
     </ClInclude>
     <ClInclude Include="src\server\workspace_manager.h">
       <Filter>Header File\server</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resource\note_skin_resource.h">
+      <Filter>Header File\resource</Filter>
     </ClInclude>
     <ClInclude Include="src\resource\settings_config.h">
       <Filter>Header File\resource</Filter>
@@ -145,16 +178,16 @@
       <Filter>Header File\classes</Filter>
     </ClInclude>
     <ClInclude Include="src\controls\auto_adjust_popup_menu.h">
-      <Filter>Header File\control</Filter>
+      <Filter>Header File\controls</Filter>
     </ClInclude>
     <ClInclude Include="src\controls\editor_panel_container.h">
-      <Filter>Header File\control</Filter>
+      <Filter>Header File\controls</Filter>
     </ClInclude>
     <ClInclude Include="src\controls\panel_option_button.h">
-      <Filter>Header File\control</Filter>
+      <Filter>Header File\controls</Filter>
     </ClInclude>
     <ClInclude Include="src\controls\time_scrubber.h">
-      <Filter>Header File\control</Filter>
+      <Filter>Header File\controls</Filter>
     </ClInclude>
     <ClInclude Include="src\editor\note_skin_editor_plugin.h">
       <Filter>Header File\editor</Filter>
@@ -163,7 +196,25 @@
       <Filter>Header File\editor</Filter>
     </ClInclude>
     <ClInclude Include="src\controls\confirm_dialog.h">
-      <Filter>Header File\control</Filter>
+      <Filter>Header File\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\controls\stauts_label.h">
+      <Filter>Header File\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\helpers\composition_patch_helper.h">
+      <Filter>Header File\helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\helpers\composition_signature_helper.h">
+      <Filter>Header File\helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\helpers\lte_chart_note_helper.h">
+      <Filter>Header File\helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\helpers\lte_chart_analysis_helper.h">
+      <Filter>Header File\helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\helpers\lte_speed_curve_helper.h">
+      <Filter>Header File\helpers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -176,8 +227,20 @@
     <ClCompile Include="src\plugin\plugin_base.cpp">
       <Filter>Source File\plugin</Filter>
     </ClCompile>
+    <ClCompile Include="src\plugin\plugin_context.cpp">
+      <Filter>Source File\plugin</Filter>
+    </ClCompile>
+    <ClCompile Include="src\plugin\plugin_manifest.cpp">
+      <Filter>Source File\plugin</Filter>
+    </ClCompile>
     <ClCompile Include="src\plugin\plugin_manager.cpp">
       <Filter>Source File\plugin</Filter>
+    </ClCompile>
+    <ClCompile Include="src\plugin\plugin_runtime.cpp">
+      <Filter>Source File\plugin</Filter>
+    </ClCompile>
+    <ClCompile Include="src\server\audio_visualizer_server.cpp">
+      <Filter>Source File\server</Filter>
     </ClCompile>
     <ClCompile Include="src\server\backup_server.cpp">
       <Filter>Source File\server</Filter>
@@ -188,13 +251,22 @@
     <ClCompile Include="src\server\composition_server.cpp">
       <Filter>Source File\server</Filter>
     </ClCompile>
+    <ClCompile Include="src\server\file_save_server.cpp">
+      <Filter>Source File\server</Filter>
+    </ClCompile>
     <ClCompile Include="src\server\file_system_server.cpp">
+      <Filter>Source File\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\server\graph_editor_server.cpp">
       <Filter>Source File\server</Filter>
     </ClCompile>
     <ClCompile Include="src\server\hotkey_tip_server.cpp">
       <Filter>Source File\server</Filter>
     </ClCompile>
     <ClCompile Include="src\server\lte_user.cpp">
+      <Filter>Source File\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\server\note_skin_server.cpp">
       <Filter>Source File\server</Filter>
     </ClCompile>
     <ClCompile Include="src\server\preferences_manager.cpp">
@@ -204,6 +276,9 @@
       <Filter>Source File\server</Filter>
     </ClCompile>
     <ClCompile Include="src\server\properties_server.cpp">
+      <Filter>Source File\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\server\shader_server.cpp">
       <Filter>Source File\server</Filter>
     </ClCompile>
     <ClCompile Include="src\server\source_monitor_server.cpp">
@@ -217,6 +292,9 @@
     </ClCompile>
     <ClCompile Include="src\server\workspace_manager.cpp">
       <Filter>Source File\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\resource\note_skin_resource.cpp">
+      <Filter>Source File\resource</Filter>
     </ClCompile>
     <ClCompile Include="src\resource\settings_config.cpp">
       <Filter>Source File\resource</Filter>
@@ -246,16 +324,16 @@
       <Filter>Source File\classes</Filter>
     </ClCompile>
     <ClCompile Include="src\controls\auto_adjust_popup_menu.cpp">
-      <Filter>Source File\control</Filter>
+      <Filter>Source File\controls</Filter>
     </ClCompile>
     <ClCompile Include="src\controls\editor_panel_container.cpp">
-      <Filter>Source File\control</Filter>
+      <Filter>Source File\controls</Filter>
     </ClCompile>
     <ClCompile Include="src\controls\panel_option_button.cpp">
-      <Filter>Source File\control</Filter>
+      <Filter>Source File\controls</Filter>
     </ClCompile>
     <ClCompile Include="src\controls\time_scrubber.cpp">
-      <Filter>Source File\control</Filter>
+      <Filter>Source File\controls</Filter>
     </ClCompile>
     <ClCompile Include="src\editor\note_skin_editor_plugin.cpp">
       <Filter>Source File\editor</Filter>
@@ -264,7 +342,25 @@
       <Filter>Source File\editor</Filter>
     </ClCompile>
     <ClCompile Include="src\controls\confirm_dialog.cpp">
-      <Filter>Source File\control</Filter>
+      <Filter>Source File\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\controls\stauts_label.cpp">
+      <Filter>Source File\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\helpers\composition_patch_helper.cpp">
+      <Filter>Source File\helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\helpers\composition_signature_helper.cpp">
+      <Filter>Source File\helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\helpers\lte_chart_note_helper.cpp">
+      <Filter>Source File\helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\helpers\lte_chart_analysis_helper.cpp">
+      <Filter>Source File\helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\helpers\lte_speed_curve_helper.cpp">
+      <Filter>Source File\helpers</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

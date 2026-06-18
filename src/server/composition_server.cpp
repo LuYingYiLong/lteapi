@@ -62,6 +62,8 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("fetch_timeline_config", "uuid", "scene_path"), &LTECompositionServer::fetch_timeline_config);
 		ClassDB::bind_method(D_METHOD("get_scene_layers_collapsed_items", "uuid", "scene_path"), &LTECompositionServer::get_scene_layers_collapsed_items);
 		ClassDB::bind_method(D_METHOD("set_scene_layers_collapsed_items", "uuid", "scene_path", "collapsed_items"), &LTECompositionServer::set_scene_layers_collapsed_items);
+		ClassDB::bind_method(D_METHOD("get_scene_layers_scroll", "uuid", "scene_path"), &LTECompositionServer::get_scene_layers_scroll);
+		ClassDB::bind_method(D_METHOD("set_scene_layers_scroll", "uuid", "scene_path", "scroll_y"), &LTECompositionServer::set_scene_layers_scroll);
 		ClassDB::bind_method(D_METHOD("set_timeline_snap_mode", "uuid", "scene_path", "enable"), &LTECompositionServer::set_timeline_snap_mode);
 		ClassDB::bind_method(D_METHOD("set_timeline_step", "uuid", "scene_path", "step"), &LTECompositionServer::set_timeline_step);
 		ClassDB::bind_method(D_METHOD("set_timeline_counting_unit", "uuid", "scene_path", "counting_unit"), &LTECompositionServer::set_timeline_counting_unit);
@@ -2129,6 +2131,38 @@ namespace godot {
 		Dictionary scene_settings = settings_config->composition_timeline_scene_settings.get(uuid, Dictionary());
 		Dictionary config = scene_settings.get(scene_key, Dictionary());
 		config["scene_layers_collapsed_items"] = collapsed_items;
+		scene_settings[scene_key] = config;
+		settings_config->composition_timeline_scene_settings[uuid] = scene_settings;
+		settings_config->save_settings_config(false);
+	}
+
+	Vector2 LTECompositionServer::get_scene_layers_scroll(const String& uuid, const String& scene_path) const {
+		if (uuid.is_empty() || scene_path.is_empty()) {
+			return Vector2();
+		}
+		LTESettingsConfig* settings_config = LTESettingsConfig::get_singleton();
+		if (!settings_config) {
+			return Vector2();
+		}
+		String scene_key = _get_absolute_scene_path(scene_path);
+		Dictionary scene_settings = settings_config->composition_timeline_scene_settings.get(uuid, Dictionary());
+		Dictionary config = scene_settings.get(scene_key, Dictionary());
+		return Vector2(float(config.get("scene_layers_scroll_x", 0)), float(config.get("scene_layers_scroll_y", 0)));
+	}
+
+	void LTECompositionServer::set_scene_layers_scroll(const String& uuid, const String& scene_path, const Vector2& scroll) {
+		if (uuid.is_empty() || scene_path.is_empty()) {
+			return;
+		}
+		LTESettingsConfig* settings_config = LTESettingsConfig::get_singleton();
+		if (!settings_config) {
+			return;
+		}
+		String scene_key = _get_absolute_scene_path(scene_path);
+		Dictionary scene_settings = settings_config->composition_timeline_scene_settings.get(uuid, Dictionary());
+		Dictionary config = scene_settings.get(scene_key, Dictionary());
+		config["scene_layers_scroll_x"] = scroll.x;
+		config["scene_layers_scroll_y"] = scroll.y;
 		scene_settings[scene_key] = config;
 		settings_config->composition_timeline_scene_settings[uuid] = scene_settings;
 		settings_config->save_settings_config(false);

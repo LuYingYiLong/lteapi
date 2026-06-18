@@ -1554,7 +1554,53 @@ namespace godot {
 		return OK;
 	}
 
-	Dictionary LTEPluginManager::create_plugin_project(const Dictionary& options) const {
+	Error LTEPluginManager::_copy_sdk_project(const String& source_path, const String& target_path) {
+		Ref<DirAccess> source_dir = DirAccess::open(source_path);
+		if (source_dir.is_null()) {
+			return ERR_CANT_OPEN;
+		}
+
+		Error make_err = DirAccess::make_dir_recursive_absolute(target_path);
+		if (make_err != OK && make_err != ERR_ALREADY_EXISTS) {
+			return make_err;
+		}
+
+		source_dir->list_dir_begin();
+		String item_name = source_dir->get_next();
+		while (!item_name.is_empty()) {
+			if (item_name == "." || item_name == "..") {
+				item_name = source_dir->get_next();
+				continue;
+			}
+
+			if (item_name.begins_with(".godot") || item_name.begins_with(".git") ||
+					item_name.begins_with("_downloads") || item_name.begins_with(".staging_")) {
+				item_name = source_dir->get_next();
+				continue;
+			}
+
+			String source_item = source_path.path_join(item_name);
+			String target_item = target_path.path_join(item_name);
+			Error copy_err = OK;
+			if (source_dir->current_is_dir()) {
+				copy_err = _copy_sdk_project(source_item, target_item);
+			}
+			else {
+				DirAccess::make_dir_recursive_absolute(target_item.get_base_dir());
+				copy_err = DirAccess::copy_absolute(source_item, target_item);
+			}
+			if (copy_err != OK) {
+				source_dir->list_dir_end();
+				return copy_err;
+			}
+
+			item_name = source_dir->get_next();
+		}
+		source_dir->list_dir_end();
+		return OK;
+	}
+
+	Dictionary LTEPluginManager::create_plugin_project(const Dictionary& options) {
 		Dictionary result;
 
 		String godot_path = options.get("godot_path", "");
@@ -1601,10 +1647,36 @@ namespace godot {
 			return result;
 		}
 
+		if (DirAccess::dir_exists_absolute(output_path)) {
+			Ref<DirAccess> output_dir = DirAccess::open(output_path);
+			if (output_dir.is_valid()) {
+				output_dir->list_dir_begin();
+				String item_name = output_dir->get_next();
+				while (item_name == "." || item_name == "..") {
+					item_name = output_dir->get_next();
+				}
+				output_dir->list_dir_end();
+				if (!item_name.is_empty()) {
+					result["ok"] = false;
+					result["error"] = "PLUGIN_OUTPUT_NOT_EMPTY_NAME";
+					return result;
+				}
+			}
+		}
+
+		Error copy_err = _copy_sdk_project(sdk_path, output_path);
+		if (copy_err != OK) {
+			_delete_dir_recursive(output_path);
+			result["ok"] = false;
+			result["error"] = "PLUGIN_COPY_SDK_FAILED_NAME";
+			result["error_code"] = copy_err;
+			return result;
+		}
+
 		PackedStringArray args;
 		args.append("--headless");
 		args.append("--path");
-		args.append(sdk_path);
+		args.append(output_path);
 		args.append("--script");
 		args.append("res://tools/init_plugin.gd");
 		args.append("--");
@@ -1618,20 +1690,8 @@ namespace godot {
 			args.append("--description");
 			args.append(description);
 		}
-		args.append("--output");
-		args.append(output_path);
-
-		int exit_code = -1;
 		Array output;
-		int exec_err = OS::get_singleton()->execute(godot_path, args, output, &exit_code, true);
-
-		if (exec_err != 0) {
-			result["ok"] = false;
-			result["error"] = vformat("Failed to execute Godot: %s (err=%d)", godot_path, exec_err);
-			result["output"] = output;
-			result["exit_code"] = exit_code;
-			return result;
-		}
+		int exit_code = OS::get_singleton()->execute(godot_path, args, output, true);
 
 		result["ok"] = (exit_code == 0);
 		result["output"] = output;
@@ -1642,7 +1702,9 @@ namespace godot {
 			print_line(vformat("Plugin project created: %s -> %s", plugin_id, output_path));
 		}
 		else {
-			result["error"] = vformat("init_plugin.gd exited with code %d", exit_code);
+			_delete_dir_recursive(output_path);
+			result["error"] = "CREATE_PLUGIN_PROJECT_FAILED_NAME";
+			result["message"] = vformat("init_plugin.gd exited with code %d", exit_code);
 		}
 
 		return result;
@@ -1808,27 +1870,34 @@ namespace godot {
 			return;
 		}
 
-		MainLoop *loop = Engine::get_singleton()->get_main_loop();
+		MainLoop* loop = Engine::get_singleton()->get_main_loop();
 		if (loop == nullptr) {
 			return;
 		}
 
-		SceneTree *tree = Object::cast_to<SceneTree>(loop);
+		SceneTree* tree = Object::cast_to<SceneTree>(loop);
 		if (tree == nullptr) {
 			return;
 		}
 
-		Window *root = tree->get_root();
+		Window* root = tree->get_root();
 		if (root == nullptr) {
 			return;
 		}
 
-		_sdk_download_request = memnew(HTTPRequest);
-		_sdk_download_request->set_use_threads(true);
-		_sdk_download_request->set_timeout(0.0);
-		_sdk_download_request->connect("request_completed",
-			Callable(this, "_sdk_download_request_completed"));
-		root->add_child(_sdk_download_request);
+		HTTPRequest* request = memnew(HTTPRequest);
+		request->set_use_threads(true);
+		request->set_timeout(0.0);
+		Error connect_err = request->connect("request_completed",
+			callable_mp(this, &LTEPluginManager::_sdk_download_request_completed));
+		if (connect_err != OK) {
+			memdelete(request);
+			ERR_PRINT(vformat("Failed to connect SDK download request signal (err=%d)", connect_err));
+			return;
+		}
+
+		root->add_child(request);
+		_sdk_download_request = request;
 	}
 
 	void LTEPluginManager::_sdk_download_request_completed(int result, int response_code, const PackedStringArray& headers, const PackedByteArray& body) {
@@ -1881,7 +1950,6 @@ namespace godot {
 			_sdk_download_state["state"] = "succeeded";
 			_sdk_download_state["message"] = "SDK_DOWNLOAD_SUCCESS_NAME";
 			_emit_sdk_download_state();
-			emit_signal("sdk_installed", install_result.get("version", ""));
 			Dictionary complete_result;
 			complete_result["ok"] = true;
 			complete_result["path"] = install_result.get("path", "");

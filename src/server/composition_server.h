@@ -120,6 +120,8 @@ namespace godot {
 		Dictionary fetch_timeline_config(const String& uuid, const String& scene_path) const;
 		PackedStringArray get_scene_layers_collapsed_items(const String& uuid, const String& scene_path) const;
 		void set_scene_layers_collapsed_items(const String& uuid, const String& scene_path, const PackedStringArray& collapsed_items);
+		Vector2 get_scene_layers_scroll(const String& uuid, const String& scene_path) const;
+		void set_scene_layers_scroll(const String& uuid, const String& scene_path, const Vector2& scroll);
 		void set_timeline_snap_mode(const String& uuid, const String& scene_path, const bool enable);
 		void set_timeline_step(const String& uuid, const String& scene_path, const double step);
 		void set_timeline_counting_unit(const String& uuid, const String& scene_path, const String& counting_unit);

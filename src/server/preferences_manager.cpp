@@ -107,6 +107,16 @@ namespace godot {
         );
         editor_audio_analyzer_path->set_editor_hint(PROPERTY_HINT_GLOBAL_FILE, "*.exe");
 
+        Ref<LTEPreferenceConfigHandle> godot_executable_path = create_pref_config_handle(
+            "core.godot_executable_path",
+            LTEPreferenceConfigSchema::PREF_CONFIG_TYPE_STRING,
+            String(),
+            "GODOT_EXECUTABLE_PATH_NAME",
+            "GODOT_EXECUTABLE_PATH_TOOLTIP",
+            "THIRDPARTY_NAME"
+        );
+        godot_executable_path->set_editor_hint(PROPERTY_HINT_GLOBAL_FILE, "*.exe");
+
         Ref<LTEPreferenceConfigHandle> editor_background_image_path = create_pref_config_handle(
             "core.editor_background_image_path",
             LTEPreferenceConfigSchema::PREF_CONFIG_TYPE_STRING,
