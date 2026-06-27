@@ -506,6 +506,7 @@ namespace godot {
 		changed = _migrate_settings_dictionary(settings_config->timeline_panel_chart_per_bar, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->timeline_panel_chart_playhead, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->timeline_panel_chart_scroll_position, from_relative_path, to_relative_path, from_path, to_path) || changed;
+		changed = _migrate_settings_dictionary(settings_config->timeline_panel_chart_collapsed_note_tracks, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->composition_timeline_scene_settings, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->graph_editor_playhead_auto_scroll, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->graph_editor_view_settings, from_relative_path, to_relative_path, from_path, to_path) || changed;
@@ -521,6 +522,8 @@ namespace godot {
 		changed = _migrate_settings_dictionary(settings_config->source_monitor_show_debug_info, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->source_monitor_screen, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->source_monitor_window_mode, from_relative_path, to_relative_path, from_path, to_path) || changed;
+		changed = _migrate_settings_dictionary(settings_config->source_monitor_view_hdr_2d, from_relative_path, to_relative_path, from_path, to_path) || changed;
+		changed = _migrate_settings_dictionary(settings_config->source_monitor_game_hdr_2d, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->file_system_panel_selected_file, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->file_system_panel_collapsed_folders, from_relative_path, to_relative_path, from_path, to_path) || changed;
 		changed = _migrate_settings_dictionary(settings_config->file_system_panel_view_state, from_relative_path, to_relative_path, from_path, to_path) || changed;

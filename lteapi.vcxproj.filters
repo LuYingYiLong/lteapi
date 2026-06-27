@@ -183,6 +183,9 @@
     <ClInclude Include="src\controls\editor_panel_container.h">
       <Filter>Header File\controls</Filter>
     </ClInclude>
+    <ClInclude Include="src\controls\inspector_view_base.h">
+      <Filter>Header File\controls</Filter>
+    </ClInclude>
     <ClInclude Include="src\controls\panel_option_button.h">
       <Filter>Header File\controls</Filter>
     </ClInclude>
@@ -327,6 +330,9 @@
       <Filter>Source File\controls</Filter>
     </ClCompile>
     <ClCompile Include="src\controls\editor_panel_container.cpp">
+      <Filter>Source File\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\controls\inspector_view_base.cpp">
       <Filter>Source File\controls</Filter>
     </ClCompile>
     <ClCompile Include="src\controls\panel_option_button.cpp">

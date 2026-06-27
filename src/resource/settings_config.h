@@ -47,6 +47,7 @@ namespace godot {
 		Dictionary timeline_panel_chart_per_bar;
 		Dictionary timeline_panel_chart_playhead;
 		Dictionary timeline_panel_chart_scroll_position;
+		Dictionary timeline_panel_chart_collapsed_note_tracks;
 		Dictionary timeline_panel_note_group_colors;
 
 		Dictionary composition_timeline_scene_settings;
@@ -72,7 +73,11 @@ namespace godot {
 		Dictionary source_monitor_snap_settings;
 		Dictionary source_monitor_screen;
 		Dictionary source_monitor_window_mode;
-		
+		Dictionary source_monitor_view_hdr_2d;
+		Dictionary source_monitor_game_hdr_2d;
+
+		Dictionary path_editor_view_configs;
+
 		Dictionary file_system_panel_selected_file;
 		Dictionary file_system_panel_collapsed_folders;
 		Dictionary file_system_panel_view_state;

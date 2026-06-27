@@ -36,6 +36,7 @@ namespace godot {
 		Array sort_notes(const Array& notes);
 		String make_note_identity(const Dictionary& note);
 		bool notes_intersect(const Dictionary& a, const Dictionary& b);
+		bool notes_conflict(const Dictionary& a, const Dictionary& b, const Dictionary& options = Dictionary());
 		Array find_overlaps(const Array& notes, const Dictionary& options = Dictionary());
 		Dictionary make_note_delta(const Array& old_notes, const Array& new_notes);
 		Dictionary apply_note_delta(const Dictionary& chart, const Dictionary& delta);

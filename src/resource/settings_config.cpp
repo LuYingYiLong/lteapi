@@ -261,6 +261,7 @@ namespace godot {
 			timeline_panel_chart_per_bar = file->get_value("timeline_panel", "chart_per_bar", Dictionary());
 			timeline_panel_chart_playhead = file->get_value("timeline_panel", "chart_playhead", Dictionary());
 			timeline_panel_chart_scroll_position = file->get_value("timeline_panel", "chart_scroll_position", Dictionary());
+			timeline_panel_chart_collapsed_note_tracks = file->get_value("timeline_panel", "chart_collapsed_note_tracks", Dictionary());
 			timeline_panel_note_group_colors = file->get_value("timeline_panel", "note_group_colors", Dictionary());
 			composition_timeline_scene_settings = file->get_value("composition_timeline", "scene_settings", Dictionary());
 			composition_timeline_last_opened = file->get_value("composition_timeline", "last_opened", Dictionary());
@@ -281,6 +282,9 @@ namespace godot {
 			source_monitor_snap_settings = file->get_value("source_monitor", "snap_settings", Dictionary());
 			source_monitor_screen = file->get_value("source_monitor", "screen", Dictionary());
 			source_monitor_window_mode = file->get_value("source_monitor", "window_mode", Dictionary());
+			source_monitor_view_hdr_2d = file->get_value("source_monitor", "view_hdr_2d", Dictionary());
+			source_monitor_game_hdr_2d = file->get_value("source_monitor", "game_hdr_2d", Dictionary());
+			path_editor_view_configs = file->get_value("path_editor", "view_configs", Dictionary());
 			file_system_panel_selected_file = file->get_value("file_system_panel", "selected_file", Dictionary());
 			file_system_panel_collapsed_folders = file->get_value("file_system_panel", "collapsed_folders", Dictionary());
 			file_system_panel_view_state = file->get_value("file_system_panel", "view_state", Dictionary());
@@ -293,6 +297,7 @@ namespace godot {
 			timeline_panel_chart_per_bar = convert_project_path_dictionary(timeline_panel_chart_per_bar, true);
 			timeline_panel_chart_playhead = convert_project_path_dictionary(timeline_panel_chart_playhead, true);
 			timeline_panel_chart_scroll_position = convert_project_path_dictionary(timeline_panel_chart_scroll_position, true);
+			timeline_panel_chart_collapsed_note_tracks = convert_project_path_dictionary(timeline_panel_chart_collapsed_note_tracks, true);
 			timeline_panel_note_group_colors = convert_project_path_dictionary(timeline_panel_note_group_colors, true);
 			composition_timeline_scene_settings = convert_project_path_dictionary(composition_timeline_scene_settings, true);
 			composition_timeline_last_opened = convert_project_path_dictionary(composition_timeline_last_opened, true);
@@ -340,6 +345,7 @@ namespace godot {
 		file->set_value("timeline_panel", "chart_per_bar", convert_project_path_dictionary(timeline_panel_chart_per_bar, false));
 		file->set_value("timeline_panel", "chart_playhead", convert_project_path_dictionary(timeline_panel_chart_playhead, false));
 		file->set_value("timeline_panel", "chart_scroll_position", convert_project_path_dictionary(timeline_panel_chart_scroll_position, false));
+		file->set_value("timeline_panel", "chart_collapsed_note_tracks", convert_project_path_dictionary(timeline_panel_chart_collapsed_note_tracks, false));
 		file->set_value("timeline_panel", "note_group_colors", convert_project_path_dictionary(timeline_panel_note_group_colors, false));
 		file->set_value("composition_timeline", "scene_settings", convert_project_path_dictionary(composition_timeline_scene_settings, false));
 		file->set_value("composition_timeline", "last_opened", convert_project_path_dictionary(composition_timeline_last_opened, false));
@@ -360,6 +366,9 @@ namespace godot {
 		file->set_value("source_monitor", "snap_settings", source_monitor_snap_settings);
 		file->set_value("source_monitor", "screen", source_monitor_screen);
 		file->set_value("source_monitor", "window_mode", source_monitor_window_mode);
+		file->set_value("source_monitor", "view_hdr_2d", source_monitor_view_hdr_2d);
+		file->set_value("source_monitor", "game_hdr_2d", source_monitor_game_hdr_2d);
+			file->set_value("path_editor", "view_configs", path_editor_view_configs);
 		file->set_value("file_system_panel", "selected_file", convert_project_path_dictionary(file_system_panel_selected_file, false));
 		file->set_value("file_system_panel", "collapsed_folders", convert_project_path_dictionary(file_system_panel_collapsed_folders, false));
 		file->set_value("file_system_panel", "view_state", convert_project_path_dictionary(file_system_panel_view_state, false));
@@ -404,6 +413,7 @@ namespace godot {
 		changed = remove_unused_uuid_entries(timeline_panel_chart_per_bar, uuids) || changed;
 		changed = remove_unused_uuid_entries(timeline_panel_chart_playhead, uuids) || changed;
 		changed = remove_unused_uuid_entries(timeline_panel_chart_scroll_position, uuids) || changed;
+		changed = remove_unused_uuid_entries(timeline_panel_chart_collapsed_note_tracks, uuids) || changed;
 		changed = remove_unused_uuid_entries(composition_timeline_scene_settings, uuids) || changed;
 		changed = remove_unused_uuid_entries(composition_timeline_last_opened, uuids) || changed;
 				changed = remove_unused_uuid_entries(scene_layers_settings, uuids) || changed;
@@ -422,6 +432,9 @@ namespace godot {
 		changed = remove_unused_uuid_entries(source_monitor_snap_settings, uuids) || changed;
 		changed = remove_unused_uuid_entries(source_monitor_screen, uuids) || changed;
 		changed = remove_unused_uuid_entries(source_monitor_window_mode, uuids) || changed;
+		changed = remove_unused_uuid_entries(source_monitor_view_hdr_2d, uuids) || changed;
+		changed = remove_unused_uuid_entries(source_monitor_game_hdr_2d, uuids) || changed;
+			changed = remove_unused_uuid_entries(path_editor_view_configs, uuids) || changed;
 		changed = remove_unused_uuid_entries(file_system_panel_selected_file, uuids) || changed;
 		changed = remove_unused_uuid_entries(file_system_panel_collapsed_folders, uuids) || changed;
 		changed = remove_unused_uuid_entries(file_system_panel_view_state, uuids) || changed;

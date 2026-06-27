@@ -72,6 +72,7 @@ namespace godot {
 		result["start_time"] = UtilityFunctions::snappedf(static_cast<double>(modifier.get("start_time", 0.0)), 0.0001);
 		result["end_time"] = UtilityFunctions::snappedf(static_cast<double>(modifier.get("end_time", 0.0)), 0.0001);
 		result["enabled"] = static_cast<bool>(modifier.get("enabled", true));
+		// Common fields for all modifier types
 		result["amplitude"] = modifier.get("amplitude", Array());
 		result["frequency"] = static_cast<double>(modifier.get("frequency", 0.0));
 		result["seed"] = static_cast<int64_t>(modifier.get("seed", 0));
@@ -81,6 +82,41 @@ namespace godot {
 		result["phase"] = static_cast<double>(modifier.get("phase", 0.0));
 		result["fade_in"] = static_cast<double>(modifier.get("fade_in", 0.0));
 		result["fade_out"] = static_cast<double>(modifier.get("fade_out", 0.0));
+		// Sine swing specific
+		result["phase_offset"] = static_cast<double>(modifier.get("phase_offset", 0.0));
+		result["phase_delta"] = static_cast<double>(modifier.get("phase_delta", 0.0));
+		result["bpm_sync"] = static_cast<bool>(modifier.get("bpm_sync", false));
+		// Circular motion specific
+		result["radius_x"] = static_cast<double>(modifier.get("radius_x", 0.0));
+		result["radius_y"] = static_cast<double>(modifier.get("radius_y", 0.0));
+		result["speed"] = static_cast<double>(modifier.get("speed", 0.0));
+		result["direction"] = String(modifier.get("direction", "cw"));
+		result["initial_phase"] = static_cast<double>(modifier.get("initial_phase", 0.0));
+		// Spring impact specific
+		result["displacement"] = static_cast<double>(modifier.get("displacement", 0.0));
+		result["damping"] = static_cast<double>(modifier.get("damping", 0.0));
+		result["direction_angle"] = static_cast<double>(modifier.get("direction_angle", 0.0));
+		// Noise drift specific
+		result["scale_x"] = static_cast<double>(modifier.get("scale_x", 0.0));
+		result["scale_y"] = static_cast<double>(modifier.get("scale_y", 0.0));
+		result["octaves"] = static_cast<int64_t>(modifier.get("octaves", 0));
+		result["speed"] = static_cast<double>(modifier.get("speed", 0.0));
+		result["persistence"] = static_cast<double>(modifier.get("persistence", 0.0));
+		// Path following specific
+		result["path"] = modifier.get("path", Array());
+		result["loop"] = static_cast<bool>(modifier.get("loop", false));
+		result["reverse"] = static_cast<bool>(modifier.get("reverse", false));
+		result["auto_rotate"] = static_cast<bool>(modifier.get("auto_rotate", false));
+		result["curve_mode"] = String(modifier.get("curve_mode", "line"));
+		result["speed_mode"] = String(modifier.get("speed_mode", "equal_distance"));
+		result["closed_path"] = static_cast<bool>(modifier.get("closed_path", false));
+		// Phase 2 universal fields
+		result["blend_mode"] = String(modifier.get("blend_mode", "add"));
+		result["strength"] = static_cast<double>(modifier.get("strength", 1.0));
+		result["loop_count"] = static_cast<int64_t>(modifier.get("loop_count", 0));
+		result["loop_mode"] = String(modifier.get("loop_mode", "normal"));
+		result["priority"] = static_cast<int64_t>(modifier.get("priority", 0));
+		result["use_project_bpm"] = static_cast<bool>(modifier.get("use_project_bpm", false));
 		return result;
 	}
 
@@ -193,6 +229,21 @@ namespace godot {
 		}
 		if (modifier_type == "beat_pulse") {
 			return ts != nullptr ? ts->translate("BEAT_PULSE_MODIFIER_NAME") : "Beat Pulse";
+		}
+		if (modifier_type == "sine_swing") {
+			return ts != nullptr ? ts->translate("SINE_SWING_MODIFIER_NAME") : "Sine Swing";
+		}
+		if (modifier_type == "circular_motion") {
+			return ts != nullptr ? ts->translate("CIRCULAR_MOTION_MODIFIER_NAME") : "Circular Motion";
+		}
+		if (modifier_type == "spring_impact") {
+			return ts != nullptr ? ts->translate("SPRING_IMPACT_MODIFIER_NAME") : "Spring Impact";
+		}
+		if (modifier_type == "noise_drift") {
+			return ts != nullptr ? ts->translate("NOISE_DRIFT_MODIFIER_NAME") : "Noise Drift";
+		}
+		if (modifier_type == "path_following") {
+			return ts != nullptr ? ts->translate("PATH_FOLLOWING_MODIFIER_NAME") : "Path Following";
 		}
 		return modifier_type.capitalize();
 	}

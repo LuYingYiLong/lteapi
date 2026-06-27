@@ -29,6 +29,8 @@ namespace godot {
 	class LTEAudioVisualizerServer;
 	class LTENoteSkinServer;
 	class LTEBackupServer;
+	class LTEPathEditorServer;
+	class LTEInspectorRegistry;
 	class LTEUser;
 	class LTECompositionSignatureHelper;
 	class LTECompositionPatchHelper;
@@ -64,6 +66,8 @@ namespace godot {
 		LTEAudioVisualizerServer* audio_visualizer_server = nullptr;
 		LTENoteSkinServer* note_skin_server = nullptr;
 		LTEBackupServer* backup_server = nullptr;
+		LTEPathEditorServer* path_editor_server = nullptr;
+		LTEInspectorRegistry* inspector_registry = nullptr;
 		LTEUser* user = nullptr;
 		LTECompositionSignatureHelper* composition_signature_helper = nullptr;
 		LTECompositionPatchHelper* composition_patch_helper = nullptr;
@@ -108,6 +112,8 @@ namespace godot {
 		LTEAudioVisualizerServer* get_audio_visualizer_server() const;
 		LTENoteSkinServer* get_note_skin_server() const;
 		LTEBackupServer* get_backup_server() const;
+		LTEPathEditorServer* get_path_editor_server() const;
+		LTEInspectorRegistry* get_inspector_registry() const;
 		LTEUser* get_user() const;
 		LTECompositionSignatureHelper* get_composition_signature_helper() const;
 		LTECompositionPatchHelper* get_composition_patch_helper() const;

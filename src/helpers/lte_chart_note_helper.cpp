@@ -20,6 +20,7 @@ void LTEChartNoteHelper::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("sort_notes", "notes"), &LTEChartNoteHelper::sort_notes);
 	ClassDB::bind_method(D_METHOD("make_note_identity", "note"), &LTEChartNoteHelper::make_note_identity);
 	ClassDB::bind_method(D_METHOD("notes_intersect", "a", "b"), &LTEChartNoteHelper::notes_intersect);
+	ClassDB::bind_method(D_METHOD("notes_conflict", "a", "b", "options"), &LTEChartNoteHelper::notes_conflict, DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("find_overlaps", "notes", "options"), &LTEChartNoteHelper::find_overlaps, DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("make_note_delta", "old_notes", "new_notes"), &LTEChartNoteHelper::make_note_delta);
 	ClassDB::bind_method(D_METHOD("apply_note_delta", "chart", "delta"), &LTEChartNoteHelper::apply_note_delta);
@@ -209,6 +210,26 @@ bool LTEChartNoteHelper::notes_intersect(const Dictionary& a, const Dictionary& 
 	return MAX(a_start, b_start) < MIN(a_end, b_end);
 }
 
+bool LTEChartNoteHelper::notes_conflict(const Dictionary& a, const Dictionary& b, const Dictionary& options) {
+	if (static_cast<int32_t>(a.get("key", -1)) != static_cast<int32_t>(b.get("key", -1))) {
+		return false;
+	}
+
+	if (!bool(options.get("allow_hold_body_overlap", false))) {
+		return notes_intersect(a, b);
+	}
+
+	const String a_type = a.get("type", "tap");
+	const String b_type = b.get("type", "tap");
+	const double a_head = a_type == String("hold")
+		? static_cast<double>(a.get("start_beat", 0.0))
+		: static_cast<double>(a.get("end_beat", 0.0));
+	const double b_head = b_type == String("hold")
+		? static_cast<double>(b.get("start_beat", 0.0))
+		: static_cast<double>(b.get("end_beat", 0.0));
+	return Math::is_equal_approx(a_head, b_head);
+}
+
 Array LTEChartNoteHelper::find_overlaps(const Array& notes, const Dictionary& options) {
 	Array overlaps;
 	int32_t note_count = notes.size();
@@ -240,7 +261,7 @@ Array LTEChartNoteHelper::find_overlaps(const Array& notes, const Dictionary& op
 			Dictionary entry_a = track_notes[i];
 			for (int32_t j = i + 1; j < track_count; ++j) {
 				Dictionary entry_b = track_notes[j];
-				if (notes_intersect(entry_a["note"], entry_b["note"])) {
+				if (notes_conflict(entry_a["note"], entry_b["note"], options)) {
 					Dictionary overlap;
 					overlap["note_a"] = Dictionary(entry_a["note"]).duplicate(true);
 					overlap["note_b"] = Dictionary(entry_b["note"]).duplicate(true);

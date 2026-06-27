@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include <godot_cpp/classes/dir_access.hpp>
@@ -39,6 +40,44 @@ namespace godot {
 			LTEPreferencesManager* preferences_manager = LTEPreferencesManager::get_singleton();
 			return preferences_manager != nullptr && preferences_manager->get_bool_value("core.scene_auto_save", false);
 		}
+
+		bool _packed_string_array_has(const PackedStringArray& values, const String& item) {
+			for (int index = 0; index < values.size(); ++index) {
+				if (String(values[index]) == item) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		PackedStringArray _normalize_packed_string_array(const PackedStringArray& source_items) {
+			PackedStringArray result;
+			for (int index = 0; index < source_items.size(); ++index) {
+				String item = String(source_items[index]);
+				if (!item.is_empty() && !_packed_string_array_has(result, item)) {
+					result.append(item);
+				}
+			}
+			return result;
+		}
+
+		PackedStringArray _normalize_string_array_variant(const Variant& value) {
+			if (value.get_type() == Variant::PACKED_STRING_ARRAY) {
+				PackedStringArray source_items = value;
+				return _normalize_packed_string_array(source_items);
+			}
+			PackedStringArray result;
+			if (value.get_type() == Variant::ARRAY) {
+				Array source_items = value;
+				for (int index = 0; index < source_items.size(); ++index) {
+					String item = String(source_items[index]);
+					if (!item.is_empty() && !_packed_string_array_has(result, item)) {
+						result.append(item);
+					}
+				}
+			}
+			return result;
+		}
 	}
 
 	void LTECompositionServer::_bind_methods() {
@@ -60,6 +99,7 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("get_last_opened_composition", "uuid"), &LTECompositionServer::get_last_opened_composition);
 		ClassDB::bind_method(D_METHOD("set_last_opened_composition", "uuid", "scene_path"), &LTECompositionServer::set_last_opened_composition);
 		ClassDB::bind_method(D_METHOD("fetch_timeline_config", "uuid", "scene_path"), &LTECompositionServer::fetch_timeline_config);
+		ClassDB::bind_method(D_METHOD("set_timeline_collapsed_layer_tracks", "uuid", "scene_path", "collapsed_layer_ids"), &LTECompositionServer::set_timeline_collapsed_layer_tracks);
 		ClassDB::bind_method(D_METHOD("get_scene_layers_collapsed_items", "uuid", "scene_path"), &LTECompositionServer::get_scene_layers_collapsed_items);
 		ClassDB::bind_method(D_METHOD("set_scene_layers_collapsed_items", "uuid", "scene_path", "collapsed_items"), &LTECompositionServer::set_scene_layers_collapsed_items);
 		ClassDB::bind_method(D_METHOD("get_scene_layers_scroll", "uuid", "scene_path"), &LTECompositionServer::get_scene_layers_scroll);
@@ -790,6 +830,90 @@ namespace godot {
 			modifier["fade_in"] = std::max(double(modifier.get("fade_in", 0.0)), 0.0);
 			modifier["fade_out"] = std::max(double(modifier.get("fade_out", 0.0)), 0.0);
 		}
+		else if (type == "sine_swing") {
+			modifier["amplitude"] = _normalize_vector2_array(modifier.get("amplitude", Array()), 20.0, 20.0);
+			modifier["frequency"] = std::max(double(modifier.get("frequency", 2.0)), 0.001);
+			modifier["phase_offset"] = double(modifier.get("phase_offset", 0.0));
+			modifier["phase_delta"] = double(modifier.get("phase_delta", 0.0));
+			modifier["bpm_sync"] = bool(modifier.get("bpm_sync", false));
+			modifier["bpm"] = std::max(double(modifier.get("bpm", 120.0)), 1.0);
+			modifier["beat_interval"] = std::max(double(modifier.get("beat_interval", 1.0)), 0.000001);
+			modifier["use_project_bpm"] = bool(modifier.get("use_project_bpm", false));
+			modifier["fade_in"] = std::max(double(modifier.get("fade_in", 0.05)), 0.0);
+			modifier["fade_out"] = std::max(double(modifier.get("fade_out", 0.05)), 0.0);
+		}
+		else if (type == "circular_motion") {
+			modifier["radius_x"] = double(modifier.get("radius_x", 50.0));
+			modifier["radius_y"] = double(modifier.get("radius_y", 50.0));
+			modifier["speed"] = std::max(double(modifier.get("speed", 1.0)), 0.000001);
+			modifier["direction"] = String(modifier.get("direction", "cw"));
+			modifier["initial_phase"] = double(modifier.get("initial_phase", 0.0));
+			modifier["bpm_sync"] = bool(modifier.get("bpm_sync", false));
+			modifier["bpm"] = std::max(double(modifier.get("bpm", 120.0)), 1.0);
+			modifier["beat_interval"] = std::max(double(modifier.get("beat_interval", 1.0)), 0.000001);
+			modifier["use_project_bpm"] = bool(modifier.get("use_project_bpm", false));
+			modifier["fade_in"] = std::max(double(modifier.get("fade_in", 0.05)), 0.0);
+			modifier["fade_out"] = std::max(double(modifier.get("fade_out", 0.05)), 0.0);
+		}
+		else if (type == "spring_impact") {
+			modifier["displacement"] = double(modifier.get("displacement", 30.0));
+			modifier["frequency"] = std::max(double(modifier.get("frequency", 4.0)), 0.001);
+			modifier["damping"] = std::clamp(double(modifier.get("damping", 0.3)), 0.0, 1.0);
+			modifier["direction_angle"] = double(modifier.get("direction_angle", 0.0));
+			modifier["fade_in"] = std::max(double(modifier.get("fade_in", 0.0)), 0.0);
+			modifier["fade_out"] = std::max(double(modifier.get("fade_out", 0.05)), 0.0);
+		}
+		else if (type == "noise_drift") {
+			modifier["scale_x"] = double(modifier.get("scale_x", 20.0));
+			modifier["scale_y"] = double(modifier.get("scale_y", 20.0));
+			modifier["octaves"] = std::clamp(int64_t(modifier.get("octaves", 3)), int64_t(1), int64_t(8));
+			modifier["speed"] = std::max(double(modifier.get("speed", 0.5)), 0.0001);
+			modifier["seed"] = int64_t(modifier.get("seed", 0));
+			modifier["persistence"] = std::clamp(double(modifier.get("persistence", 0.5)), 0.0, 1.0);
+			modifier["fade_in"] = std::max(double(modifier.get("fade_in", 0.05)), 0.0);
+			modifier["fade_out"] = std::max(double(modifier.get("fade_out", 0.05)), 0.0);
+		}
+		else if (type == "path_following") {
+			Array path = modifier.get("path", Array());
+			if (path.size() < 2) {
+				Array default_path;
+				Dictionary p0; p0["position"] = _normalize_vector2_array(Array::make(0.0, 0.0), 0.0, 0.0); p0["in_handle"] = Array::make(0.0, 0.0); p0["out_handle"] = Array::make(0.0, 0.0); default_path.append(p0);
+				Dictionary p1; p1["position"] = _normalize_vector2_array(Array::make(50.0, 0.0), 0.0, 0.0); p1["in_handle"] = Array::make(0.0, 0.0); p1["out_handle"] = Array::make(0.0, 0.0); default_path.append(p1);
+				Dictionary p2; p2["position"] = _normalize_vector2_array(Array::make(50.0, 50.0), 0.0, 0.0); p2["in_handle"] = Array::make(0.0, 0.0); p2["out_handle"] = Array::make(0.0, 0.0); default_path.append(p2);
+				Dictionary p3; p3["position"] = _normalize_vector2_array(Array::make(0.0, 50.0), 0.0, 0.0); p3["in_handle"] = Array::make(0.0, 0.0); p3["out_handle"] = Array::make(0.0, 0.0); default_path.append(p3);
+				path = default_path;
+			}
+			Array normalized_path;
+			for (int64_t pi = 0; pi < path.size(); ++pi) {
+				if (path[pi].get_type() == Variant::DICTIONARY) {
+					normalized_path.append(_normalize_path_point(path[pi]));
+				}
+			}
+			if (normalized_path.size() < 2) {
+				normalized_path.clear();
+				Dictionary p0; p0["position"] = Array::make(0.0, 0.0); p0["in_handle"] = Array::make(0.0, 0.0); p0["out_handle"] = Array::make(0.0, 0.0); normalized_path.append(p0);
+				Dictionary p1; p1["position"] = Array::make(50.0, 0.0); p1["in_handle"] = Array::make(0.0, 0.0); p1["out_handle"] = Array::make(0.0, 0.0); normalized_path.append(p1);
+				Dictionary p2; p2["position"] = Array::make(50.0, 50.0); p2["in_handle"] = Array::make(0.0, 0.0); p2["out_handle"] = Array::make(0.0, 0.0); normalized_path.append(p2);
+				Dictionary p3; p3["position"] = Array::make(0.0, 50.0); p3["in_handle"] = Array::make(0.0, 0.0); p3["out_handle"] = Array::make(0.0, 0.0); normalized_path.append(p3);
+			}
+			modifier["path"] = normalized_path;
+			String curve_mode = String(modifier.get("curve_mode", "line"));
+			modifier["curve_mode"] = curve_mode == "bezier" ? String("bezier") : String("line");
+			modifier["loop"] = bool(modifier.get("loop", true));
+			modifier["reverse"] = bool(modifier.get("reverse", false));
+			modifier["auto_rotate"] = bool(modifier.get("auto_rotate", false));
+			modifier["speed_mode"] = String(modifier.get("speed_mode", "equal_distance"));
+			modifier["closed_path"] = bool(modifier.get("closed_path", false));
+			modifier["fade_in"] = std::max(double(modifier.get("fade_in", 0.05)), 0.0);
+			modifier["fade_out"] = std::max(double(modifier.get("fade_out", 0.05)), 0.0);
+		}
+		// Phase 2 universal fields for all modifier types
+		modifier["blend_mode"] = String(modifier.get("blend_mode", "add"));
+		modifier["strength"] = std::clamp(double(modifier.get("strength", 1.0)), 0.0, 1.0);
+		modifier["loop_count"] = int64_t(modifier.get("loop_count", 0));
+		modifier["loop_mode"] = String(modifier.get("loop_mode", "normal"));
+		modifier["priority"] = int64_t(modifier.get("priority", 0));
+		modifier["project_bpm"] = std::max(double(modifier.get("project_bpm", double(modifier.get("bpm", 120.0)))), 1.0);
 		return modifier;
 	}
 
@@ -817,6 +941,18 @@ namespace godot {
 		}
 		result.append(fallback_x);
 		result.append(fallback_y);
+		return result;
+	}
+
+	Dictionary LTECompositionServer::_normalize_path_point(const Variant& value) const {
+		Dictionary result;
+		if (value.get_type() != Variant::DICTIONARY) {
+			return result;
+		}
+		Dictionary point = value;
+		result["position"] = _normalize_vector2_array(point.get("position", Array()), 0.0, 0.0);
+		result["in_handle"] = _normalize_vector2_array(point.get("in_handle", Array()), 0.0, 0.0);
+		result["out_handle"] = _normalize_vector2_array(point.get("out_handle", Array()), 0.0, 0.0);
 		return result;
 	}
 
@@ -897,46 +1033,97 @@ namespace godot {
 			}
 			double start_time = double(modifier.get("start_time", 0.0));
 			double end_time = double(modifier.get("end_time", start_time));
-			if (time < start_time || time > end_time) {
-				continue;
+			int64_t loop_count = int64_t(modifier.get("loop_count", 0));
+			if (loop_count == 0) {
+				if (time < start_time || time > end_time) {
+					continue;
+				}
+			} else if (loop_count > 0) {
+				double duration = end_time - start_time;
+				if (duration > 0.0) {
+					double extended_end = start_time + duration * double(loop_count);
+					if (time < start_time || time > extended_end) {
+						continue;
+					}
+				}
 			}
+			// loop_count == -1: infinite, never skip by time
 			String type = modifier.get("type", String());
+			Variant displacement;
 			if (type == "shake" && property_name == "position") {
-				result = _apply_shake_modifier(result, modifier, time);
+				displacement = _apply_shake_modifier(value, modifier, time);
 			}
 			else if (type == "beat_pulse" && property_name == "position") {
-				result = _apply_beat_pulse_modifier(result, modifier, time);
+				displacement = _apply_beat_pulse_modifier(value, modifier, time);
 			}
+			else if (type == "sine_swing" && property_name == "position") {
+				displacement = _apply_sine_swing_modifier(value, modifier, time);
+			}
+			else if (type == "circular_motion" && property_name == "position") {
+				displacement = _apply_circular_motion_modifier(value, modifier, time);
+			}
+			else if (type == "spring_impact" && property_name == "position") {
+				displacement = _apply_spring_impact_modifier(value, modifier, time);
+			}
+			else if (type == "noise_drift" && property_name == "position") {
+				displacement = _apply_noise_drift_modifier(value, modifier, time);
+			}
+			else if (type == "path_following" && property_name == "position") {
+				displacement = _apply_path_following_modifier(value, modifier, time);
+			}
+			else {
+				continue;
+			}
+			String blend_mode = String(modifier.get("blend_mode", "add"));
+			result = _apply_blend_to_value(result, displacement, blend_mode);
 		}
 		return result;
 	}
 
 	Variant LTECompositionServer::_apply_shake_modifier(const Variant& value, const Dictionary& modifier, const double time) const {
-		double weight = _sample_modifier_fade_weight(modifier, time);
+		double loop_weight = 1.0;
+		double local_time = _compute_modifier_local_time(modifier, time, loop_weight);
+		double weight = _sample_modifier_fade_weight(modifier, time) * loop_weight;
 		if (weight <= 0.0) {
-			return value;
+			Array zero;
+			zero.append(0.0);
+			zero.append(0.0);
+			return zero;
 		}
 		Array amplitude = _normalize_vector2_array(modifier.get("amplitude", Array()), 20.0, 20.0);
-		double local_time = std::max(time - double(modifier.get("start_time", 0.0)), 0.0);
 		double frequency = std::max(double(modifier.get("frequency", 18.0)), 0.0);
 		int seed = int(modifier.get("seed", 0));
-		double offset_x = _sample_shake_value(local_time, frequency, seed, 0) * double(amplitude[0]) * weight;
-		double offset_y = _sample_shake_value(local_time, frequency, seed, 1) * double(amplitude[1]) * weight;
-		return _apply_vector_offset(value, offset_x, offset_y);
+		double strength = std::clamp(double(modifier.get("strength", 1.0)), 0.0, 1.0);
+		double offset_x = _sample_shake_value(local_time, frequency, seed, 0) * double(amplitude[0]) * weight * strength;
+		double offset_y = _sample_shake_value(local_time, frequency, seed, 1) * double(amplitude[1]) * weight * strength;
+		Array displacement;
+		displacement.append(offset_x);
+		displacement.append(offset_y);
+		return displacement;
 	}
 
 	Variant LTECompositionServer::_apply_beat_pulse_modifier(const Variant& value, const Dictionary& modifier, const double time) const {
-		double weight = _sample_modifier_fade_weight(modifier, time);
+		double loop_weight = 1.0;
+		double local_time = _compute_modifier_local_time(modifier, time, loop_weight);
+		double weight = _sample_modifier_fade_weight(modifier, time) * loop_weight;
 		if (weight <= 0.0) {
-			return value;
+			Array zero;
+			zero.append(0.0);
+			zero.append(0.0);
+			return zero;
 		}
 		double bpm = std::max(double(modifier.get("bpm", 120.0)), 1.0);
+		if (bool(modifier.get("use_project_bpm", false))) {
+			bpm = std::max(double(modifier.get("project_bpm", bpm)), 1.0);
+		}
 		double beat_interval = std::max(double(modifier.get("beat_interval", 1.0)), 0.000001);
 		double period = 60.0 / bpm * beat_interval;
 		if (period <= 0.000001) {
-			return value;
+			Array zero;
+			zero.append(0.0);
+			zero.append(0.0);
+			return zero;
 		}
-		double local_time = std::max(time - double(modifier.get("start_time", 0.0)), 0.0);
 		double phase = double(modifier.get("phase", 0.0));
 		double pulse_time = std::fmod(local_time + phase * period, period);
 		if (pulse_time < 0.0) {
@@ -944,11 +1131,375 @@ namespace godot {
 		}
 		double normalized_time = std::clamp(pulse_time / period, 0.0, 1.0);
 		double decay = std::max(double(modifier.get("decay", 2.0)), 0.000001);
-		double pulse = std::pow(1.0 - normalized_time, decay) * weight;
+		double strength = std::clamp(double(modifier.get("strength", 1.0)), 0.0, 1.0);
+		double pulse = std::pow(1.0 - normalized_time, decay) * weight * strength;
 		Array amplitude = _normalize_vector2_array(modifier.get("amplitude", Array()), 0.0, -32.0);
 		double offset_x = double(amplitude[0]) * pulse;
 		double offset_y = double(amplitude[1]) * pulse;
-		return _apply_vector_offset(value, offset_x, offset_y);
+		Array displacement;
+		displacement.append(offset_x);
+		displacement.append(offset_y);
+		return displacement;
+	}
+
+	Variant LTECompositionServer::_apply_sine_swing_modifier(const Variant& value, const Dictionary& modifier, const double time) const {
+		double loop_weight = 1.0;
+		double local_time = _compute_modifier_local_time(modifier, time, loop_weight);
+		double weight = _sample_modifier_fade_weight(modifier, time) * loop_weight;
+		if (weight <= 0.0) {
+			Array zero;
+			zero.append(0.0);
+			zero.append(0.0);
+			return zero;
+		}
+		Array amplitude = _normalize_vector2_array(modifier.get("amplitude", Array()), 20.0, 20.0);
+		double frequency = std::max(double(modifier.get("frequency", 2.0)), 0.001);
+		double phase_offset = double(modifier.get("phase_offset", 0.0));
+		double phase_delta = double(modifier.get("phase_delta", 0.0));
+		double strength = std::clamp(double(modifier.get("strength", 1.0)), 0.0, 1.0);
+
+		bool bpm_sync = bool(modifier.get("bpm_sync", false));
+		if (bpm_sync) {
+			double effective_bpm = std::max(double(modifier.get("bpm", 120.0)), 1.0);
+			if (bool(modifier.get("use_project_bpm", false))) {
+				effective_bpm = std::max(double(modifier.get("project_bpm", effective_bpm)), 1.0);
+			}
+			double beat_interval = std::max(double(modifier.get("beat_interval", 1.0)), 0.000001);
+			frequency = effective_bpm / 60.0 / beat_interval;
+		}
+
+		double angle = 2.0 * Math_PI * frequency * local_time + phase_offset;
+		double offset_x = double(amplitude[0]) * std::sin(angle) * weight * strength;
+		double offset_y = double(amplitude[1]) * std::sin(angle + phase_delta) * weight * strength;
+		Array displacement;
+		displacement.append(offset_x);
+		displacement.append(offset_y);
+		return displacement;
+	}
+
+	Variant LTECompositionServer::_apply_circular_motion_modifier(const Variant& value, const Dictionary& modifier, const double time) const {
+		double loop_weight = 1.0;
+		double local_time = _compute_modifier_local_time(modifier, time, loop_weight);
+		double weight = _sample_modifier_fade_weight(modifier, time) * loop_weight;
+		if (weight <= 0.0) {
+			Array zero;
+			zero.append(0.0);
+			zero.append(0.0);
+			return zero;
+		}
+		double radius_x = double(modifier.get("radius_x", 50.0));
+		double radius_y = double(modifier.get("radius_y", 50.0));
+		double speed = std::max(double(modifier.get("speed", 1.0)), 0.000001);
+		String direction = String(modifier.get("direction", "cw"));
+		double initial_phase = double(modifier.get("initial_phase", 0.0));
+		double strength = std::clamp(double(modifier.get("strength", 1.0)), 0.0, 1.0);
+
+		bool bpm_sync = bool(modifier.get("bpm_sync", false));
+		if (bpm_sync) {
+			double effective_bpm = std::max(double(modifier.get("bpm", 120.0)), 1.0);
+			if (bool(modifier.get("use_project_bpm", false))) {
+				effective_bpm = std::max(double(modifier.get("project_bpm", effective_bpm)), 1.0);
+			}
+			double beat_interval = std::max(double(modifier.get("beat_interval", 1.0)), 0.000001);
+			speed = effective_bpm / 60.0 / beat_interval;
+		}
+
+		double angle = 2.0 * Math_PI * speed * local_time + initial_phase * 2.0 * Math_PI;
+		if (direction == "ccw") {
+			angle = -angle;
+		}
+		double offset_x = radius_x * std::cos(angle) * weight * strength;
+		double offset_y = radius_y * std::sin(angle) * weight * strength;
+		Array displacement;
+		displacement.append(offset_x);
+		displacement.append(offset_y);
+		return displacement;
+	}
+
+	Variant LTECompositionServer::_apply_spring_impact_modifier(const Variant& value, const Dictionary& modifier, const double time) const {
+		double loop_weight = 1.0;
+		double local_time = _compute_modifier_local_time(modifier, time, loop_weight);
+		double weight = _sample_modifier_fade_weight(modifier, time) * loop_weight;
+		if (weight <= 0.0) {
+			Array zero;
+			zero.append(0.0);
+			zero.append(0.0);
+			return zero;
+		}
+		double displacement_amount = double(modifier.get("displacement", 30.0));
+		double frequency = std::max(double(modifier.get("frequency", 4.0)), 0.001);
+		double damping = std::clamp(double(modifier.get("damping", 0.3)), 0.0, 1.0);
+		double direction_angle = double(modifier.get("direction_angle", 0.0));
+		double strength = std::clamp(double(modifier.get("strength", 1.0)), 0.0, 1.0);
+
+		double omega = 2.0 * Math_PI * frequency;
+		double elapsed = local_time;
+		double value_scalar;
+		if (damping >= 1.0) {
+			value_scalar = displacement_amount * std::exp(-omega * elapsed);
+		} else {
+			double omega_d = omega * std::sqrt(1.0 - damping * damping);
+			double envelope = std::exp(-damping * omega * elapsed);
+			value_scalar = displacement_amount * envelope * std::sin(omega_d * elapsed);
+		}
+		double angle_rad = direction_angle * Math_PI / 180.0;
+		double offset_x = value_scalar * std::cos(angle_rad) * weight * strength;
+		double offset_y = value_scalar * std::sin(angle_rad) * weight * strength;
+		Array displacement;
+		displacement.append(offset_x);
+		displacement.append(offset_y);
+		return displacement;
+	}
+
+	Variant LTECompositionServer::_apply_noise_drift_modifier(const Variant& value, const Dictionary& modifier, const double time) const {
+		double loop_weight = 1.0;
+		double local_time = _compute_modifier_local_time(modifier, time, loop_weight);
+		double weight = _sample_modifier_fade_weight(modifier, time) * loop_weight;
+		if (weight <= 0.0) {
+			Array zero;
+			zero.append(0.0);
+			zero.append(0.0);
+			return zero;
+		}
+		double scale_x = double(modifier.get("scale_x", 20.0));
+		double scale_y = double(modifier.get("scale_y", 20.0));
+		int64_t octaves = std::clamp(int64_t(modifier.get("octaves", 3)), int64_t(1), int64_t(8));
+		double speed = std::max(double(modifier.get("speed", 0.5)), 0.0001);
+		int64_t seed_val = int64_t(modifier.get("seed", 0));
+		double persistence = std::clamp(double(modifier.get("persistence", 0.5)), 0.0, 1.0);
+		double strength = std::clamp(double(modifier.get("strength", 1.0)), 0.0, 1.0);
+
+		double total_x = 0.0;
+		double total_y = 0.0;
+		double normalization = 0.0;
+		double amp = 1.0;
+		for (int64_t i = 0; i < octaves; ++i) {
+			double freq = speed * std::pow(2.0, double(i));
+			double angle = 2.0 * Math_PI * freq * local_time;
+			total_x += amp * std::sin(angle + double(seed_val) * 19.191 + double(i) * 37.17);
+			total_y += amp * std::sin(angle + double(seed_val) * 73.371 + double(i) * 91.43);
+			normalization += amp;
+			amp *= persistence;
+		}
+		if (normalization > 0.000001) {
+			total_x /= normalization;
+			total_y /= normalization;
+		}
+		double offset_x = scale_x * total_x * weight * strength;
+		double offset_y = scale_y * total_y * weight * strength;
+		Array displacement;
+		displacement.append(offset_x);
+		displacement.append(offset_y);
+		return displacement;
+	}
+
+	Dictionary LTECompositionServer::_sample_path_following_geometry(const Dictionary& modifier, const double time) const {
+		Dictionary result;
+		double loop_weight = 1.0;
+		double local_time = _compute_modifier_local_time(modifier, time, loop_weight);
+		double weight = _sample_modifier_fade_weight(modifier, time) * loop_weight;
+		if (weight <= 0.0) {
+			return result;
+		}
+		Array path = modifier.get("path", Array());
+		if (path.size() < 2) {
+			return result;
+		}
+		double start_time = double(modifier.get("start_time", 0.0));
+		double end_time = double(modifier.get("end_time", start_time + 1.0));
+		double duration = end_time - start_time;
+		if (duration <= 0.000001) {
+			return result;
+		}
+		double progress = std::clamp(local_time / duration, 0.0, 1.0);
+		bool loop_flag = bool(modifier.get("loop", true));
+		bool reverse_flag = bool(modifier.get("reverse", false));
+		if (loop_flag) {
+			progress = std::fmod(progress, 1.0);
+			if (progress < 0.0) progress += 1.0;
+		}
+		if (reverse_flag) {
+			progress = 1.0 - progress;
+		}
+		bool closed_path_flag = bool(modifier.get("closed_path", false));
+		String speed_mode = String(modifier.get("speed_mode", "equal_distance"));
+		const bool bezier = String(modifier.get("curve_mode", "line")) == "bezier";
+		int64_t point_count = path.size();
+		int64_t effective_segment_count = point_count - 1;
+		if (closed_path_flag && point_count >= 2) {
+			effective_segment_count = point_count; // include closing segment
+		}
+
+		auto get_vector = [&](int64_t point_index, const String& key) {
+			Dictionary point = path[point_index % point_count];
+			Array value = _normalize_vector2_array(point.get(key, Array()), 0.0, 0.0);
+			return Vector2(float(value[0]), float(value[1]));
+		};
+		auto sample_segment = [&](int64_t segment_index, double segment_t) {
+			const Vector2 p0 = get_vector(segment_index, "position");
+			const Vector2 p1 = get_vector(segment_index + 1, "position");
+			if (!bezier) {
+				return p0.lerp(p1, float(segment_t));
+			}
+			const Vector2 c1 = p0 + get_vector(segment_index, "out_handle");
+			const Vector2 c2 = p1 + get_vector(segment_index + 1, "in_handle");
+			const float inverse_t = float(1.0 - segment_t);
+			const float local_t = float(segment_t);
+			return p0 * (inverse_t * inverse_t * inverse_t)
+				+ c1 * (3.0f * inverse_t * inverse_t * local_t)
+				+ c2 * (3.0f * inverse_t * local_t * local_t)
+				+ p1 * (local_t * local_t * local_t);
+		};
+
+		int64_t segment_index = 0;
+		double t = 0.0;
+		if (speed_mode == "equal_distance") {
+			static constexpr int ARC_STEPS = 24;
+			std::vector<double> seg_lengths;
+			std::vector<double> cumulative;
+			std::vector<std::vector<double>> arc_tables;
+			double total_length = 0.0;
+			for (int64_t si = 0; si < effective_segment_count; ++si) {
+				std::vector<double> table;
+				table.reserve(ARC_STEPS + 1);
+				table.push_back(0.0);
+				Vector2 previous = sample_segment(si, 0.0);
+				double segment_length = 0.0;
+				for (int sample_index = 1; sample_index <= ARC_STEPS; sample_index++) {
+					Vector2 current = sample_segment(si, double(sample_index) / double(ARC_STEPS));
+					segment_length += previous.distance_to(current);
+					table.push_back(segment_length);
+					previous = current;
+				}
+				arc_tables.push_back(table);
+				seg_lengths.push_back(segment_length);
+				total_length += segment_length;
+				cumulative.push_back(total_length);
+			}
+			if (total_length < 0.000001) {
+				// Degenerate path: fall back to equal-time
+				double scaled = progress * double(effective_segment_count);
+				segment_index = std::clamp(int64_t(std::floor(scaled)), int64_t(0), effective_segment_count - 1);
+				t = std::clamp(scaled - double(segment_index), 0.0, 1.0);
+			} else {
+				double target_dist = progress * total_length;
+				// Find segment by cumulative distance
+				segment_index = 0;
+				while (segment_index < effective_segment_count - 1 && cumulative[segment_index] < target_dist) {
+					++segment_index;
+				}
+				double prev_cum = segment_index > 0 ? cumulative[segment_index - 1] : 0.0;
+				double seg_len = seg_lengths[segment_index];
+				double local_distance = target_dist - prev_cum;
+				if (seg_len > 0.000001) {
+					const std::vector<double>& table = arc_tables[segment_index];
+					int sample_index = 1;
+					while (sample_index < static_cast<int>(table.size()) - 1 && table[sample_index] < local_distance) {
+						sample_index++;
+					}
+					const double from_distance = table[sample_index - 1];
+					const double to_distance = table[sample_index];
+					const double fraction = to_distance > from_distance ? (local_distance - from_distance) / (to_distance - from_distance) : 0.0;
+					t = (double(sample_index - 1) + std::clamp(fraction, 0.0, 1.0)) / double(ARC_STEPS);
+				}
+			}
+		} else {
+			// Equal-time sampling (original behavior)
+			double scaled = progress * double(effective_segment_count);
+			segment_index = std::clamp(int64_t(std::floor(scaled)), int64_t(0), effective_segment_count - 1);
+			t = std::clamp(scaled - double(segment_index), 0.0, 1.0);
+		}
+		const Vector2 position = sample_segment(segment_index, t);
+		const Vector2 p0 = get_vector(segment_index, "position");
+		const Vector2 p1 = get_vector(segment_index + 1, "position");
+		Vector2 tangent = p1 - p0;
+		if (bezier) {
+			const Vector2 c1 = p0 + get_vector(segment_index, "out_handle");
+			const Vector2 c2 = p1 + get_vector(segment_index + 1, "in_handle");
+			const float inverse_t = float(1.0 - t);
+			const float local_t = float(t);
+			tangent = (c1 - p0) * (3.0f * inverse_t * inverse_t)
+				+ (c2 - c1) * (6.0f * inverse_t * local_t)
+				+ (p1 - c2) * (3.0f * local_t * local_t);
+		}
+		if (tangent.length_squared() <= 0.0000001f) {
+			for (int offset = 1; offset < effective_segment_count && tangent.length_squared() <= 0.0000001f; offset++) {
+				tangent = get_vector(segment_index + offset + 1, "position") - get_vector(segment_index + offset, "position");
+			}
+		}
+		if (reverse_flag) {
+			tangent = -tangent;
+		}
+		result["position"] = position;
+		result["origin"] = get_vector(0, "position");
+		result["tangent"] = tangent;
+		result["weight"] = weight;
+		return result;
+	}
+
+	Variant LTECompositionServer::_apply_path_following_modifier(const Variant& value, const Dictionary& modifier, const double time) const {
+		Dictionary geometry = _sample_path_following_geometry(modifier, time);
+		if (geometry.is_empty()) {
+			return Array::make(0.0, 0.0);
+		}
+		Vector2 position = geometry.get("position", Vector2());
+		Array base_arr = _normalize_vector2_array(value, 0.0, 0.0);
+		double weight = geometry.get("weight", 0.0);
+		double strength = std::clamp(double(modifier.get("strength", 1.0)), 0.0, 1.0);
+			double offset_x = double(position.x - double(base_arr[0])) * weight * strength;
+			double offset_y = double(position.y - double(base_arr[1])) * weight * strength;
+		Array displacement;
+		displacement.append(offset_x);
+		displacement.append(offset_y);
+		return displacement;
+	}
+
+	void LTECompositionServer::_apply_path_auto_rotation(Dictionary& state, const Array& local_tracks, const Array& global_tracks, const String& layer_id, const double time) const {
+		bool found = false;
+		int64_t best_priority = std::numeric_limits<int64_t>::min();
+		int64_t order = 0;
+		int64_t best_order = -1;
+		double best_angle = 0.0;
+		auto inspect_tracks = [&](const Array& tracks) {
+			for (int track_index = 0; track_index < tracks.size(); track_index++) {
+				if (tracks[track_index].get_type() != Variant::DICTIONARY) {
+					continue;
+				}
+				Dictionary track = tracks[track_index];
+				String track_layer_id = track.get("layer_id", String());
+				if ((!track_layer_id.is_empty() && track_layer_id != layer_id) || String(track.get("property", String())) != "position") {
+					continue;
+				}
+				Array modifiers = track.get("modifiers", Array());
+				for (int modifier_index = 0; modifier_index < modifiers.size(); modifier_index++, order++) {
+					if (modifiers[modifier_index].get_type() != Variant::DICTIONARY) {
+						continue;
+					}
+					Dictionary modifier = modifiers[modifier_index];
+					if (!bool(modifier.get("enabled", true)) || !bool(modifier.get("auto_rotate", false)) || String(modifier.get("type", String())) != "path_following") {
+						continue;
+					}
+					Dictionary geometry = _sample_path_following_geometry(modifier, time);
+					Vector2 tangent = geometry.get("tangent", Vector2());
+					if (geometry.is_empty() || tangent.length_squared() <= 0.0000001f) {
+						continue;
+					}
+					int64_t priority = modifier.get("priority", 0);
+					if (!found || priority > best_priority || (priority == best_priority && order >= best_order)) {
+						const double weight = double(geometry.get("weight", 0.0)) * std::clamp(double(modifier.get("strength", 1.0)), 0.0, 1.0);
+						best_angle = Math::rad_to_deg(tangent.angle()) * std::clamp(weight, 0.0, 1.0);
+						best_priority = priority;
+						best_order = order;
+						found = true;
+					}
+				}
+			}
+		};
+		inspect_tracks(local_tracks);
+		inspect_tracks(global_tracks);
+		if (found) {
+			state["rotation"] = double(state.get("rotation", 0.0)) + best_angle;
+		}
 	}
 
 	Variant LTECompositionServer::_apply_vector_offset(const Variant& value, const double offset_x, const double offset_y) const {
@@ -970,6 +1521,125 @@ namespace godot {
 			return double(value) + offset_x;
 		}
 		return value;
+	}
+
+	Variant LTECompositionServer::_apply_blend_to_value(const Variant& value, const Variant& displacement, const String& blend_mode) const {
+		if (blend_mode == "replace") {
+			if (displacement.get_type() == Variant::ARRAY) {
+				Array disp_arr = displacement;
+				if (disp_arr.size() >= 2) {
+					double dx = double(disp_arr[0]);
+					double dy = double(disp_arr[1]);
+					if (value.get_type() == Variant::VECTOR2) {
+						return Vector2(float(dx), float(dy));
+					}
+					Array result;
+					result.append(dx);
+					result.append(dy);
+					return result;
+				}
+			}
+			return displacement;
+		}
+		if (blend_mode == "multiply") {
+			if (displacement.get_type() == Variant::ARRAY) {
+				Array disp_arr = displacement;
+				if (disp_arr.size() >= 2) {
+					double dx = double(disp_arr[0]);
+					double dy = double(disp_arr[1]);
+					return _multiply_variant_by_displacement(value, dx, dy);
+				}
+			}
+			return value;
+		}
+		// Default: "add" blend mode
+		if (displacement.get_type() == Variant::ARRAY) {
+			Array disp_arr = displacement;
+			if (disp_arr.size() >= 2) {
+				double dx = double(disp_arr[0]);
+				double dy = double(disp_arr[1]);
+				return _apply_vector_offset(value, dx, dy);
+			}
+		}
+		return value;
+	}
+
+	Variant LTECompositionServer::_multiply_variant_by_displacement(const Variant& value, const double dx, const double dy) const {
+		const double MULTIPLY_SCALE = 100.0;
+		double mult_x = 1.0 + dx / MULTIPLY_SCALE;
+		double mult_y = 1.0 + dy / MULTIPLY_SCALE;
+		if (value.get_type() == Variant::VECTOR2) {
+			Vector2 vector = value;
+			vector.x *= float(mult_x);
+			vector.y *= float(mult_y);
+			return vector;
+		}
+		if (value.get_type() == Variant::ARRAY) {
+			Array result = value;
+			if (result.size() >= 2 && _is_number(result[0]) && _is_number(result[1])) {
+				result[0] = double(result[0]) * mult_x;
+				result[1] = double(result[1]) * mult_y;
+				return result;
+			}
+		}
+		if (_is_number(value)) {
+			return double(value) * mult_x;
+		}
+		return value;
+	}
+
+	double LTECompositionServer::_compute_modifier_local_time(const Dictionary& modifier, const double time, double& r_loop_weight) const {
+		double start_time = double(modifier.get("start_time", 0.0));
+		double end_time = double(modifier.get("end_time", start_time));
+		double duration = end_time - start_time;
+		if (duration <= 0.000001) {
+			r_loop_weight = 1.0;
+			return 0.0;
+		}
+		int64_t loop_count = int64_t(modifier.get("loop_count", 0));
+		double elapsed = time - start_time;
+		if (loop_count == 0) {
+			r_loop_weight = 1.0;
+			return std::clamp(elapsed, 0.0, duration);
+		}
+		double loop_index_d = std::floor(elapsed / duration);
+		int64_t loop_index = int64_t(loop_index_d);
+		if (loop_index < 0) {
+			r_loop_weight = 0.0;
+			return 0.0;
+		}
+		if (loop_count > 0 && loop_index >= loop_count) {
+			r_loop_weight = 1.0;
+			return duration;
+		}
+		double local_t = std::fmod(elapsed, duration);
+		if (local_t < 0.0) local_t += duration;
+		String loop_mode = String(modifier.get("loop_mode", "normal"));
+		if (loop_mode == "reverse" && (loop_index % 2 == 1)) {
+			local_t = duration - local_t;
+		}
+		r_loop_weight = 1.0;
+		return local_t;
+	}
+
+	double LTECompositionServer::_resolve_bpm_at_time(const Array& bpm_list, const double time, const double fallback_bpm) const {
+		if (bpm_list.is_empty()) {
+			return fallback_bpm;
+		}
+		double resolved = fallback_bpm;
+		for (int64_t i = 0; i < bpm_list.size(); ++i) {
+			if (bpm_list[i].get_type() != Variant::DICTIONARY) {
+				continue;
+			}
+			Dictionary entry = bpm_list[i];
+			double entry_time = double(entry.get("time", 0.0));
+			if (entry_time <= time) {
+				resolved = std::max(double(entry.get("bpm", fallback_bpm)), 1.0);
+			} else {
+				break;
+			}
+		}
+		return resolved;
 	}
 
 	double LTECompositionServer::_sample_shake_value(const double local_time, const double frequency, const int seed, const int axis) const {
@@ -1937,8 +2607,10 @@ namespace godot {
 			Dictionary layer = layers[index];
 			Dictionary state = layer.duplicate(true);
 			String layer_id = state.get("id", String());
-			_apply_property_tracks(state, state.get("property_tracks", Array()), layer_id, time);
+			Array local_tracks = state.get("property_tracks", Array());
+			_apply_property_tracks(state, local_tracks, layer_id, time);
 			_apply_property_tracks(state, global_tracks, layer_id, time);
+			_apply_path_auto_rotation(state, local_tracks, global_tracks, layer_id, time);
 			state["index"] = index;
 			states.append(state);
 			if (String(state.get("type", String())) == "sequence") {
@@ -2072,6 +2744,7 @@ namespace godot {
 		config["scale"] = 96.0;
 		config["h_scroll"] = 0;
 		config["v_scroll"] = 0;
+		config["collapsed_layer_tracks"] = PackedStringArray();
 		if (uuid.is_empty() || scene_path.is_empty()) {
 			return config;
 		}
@@ -2091,7 +2764,26 @@ namespace godot {
 		config["scale"] = saved_config.get("scale", config["scale"]);
 		config["h_scroll"] = saved_config.get("h_scroll", config["h_scroll"]);
 		config["v_scroll"] = saved_config.get("v_scroll", config["v_scroll"]);
+		config["collapsed_layer_tracks"] = _normalize_string_array_variant(saved_config.get("collapsed_layer_tracks", config["collapsed_layer_tracks"]));
 		return config;
+	}
+
+	void LTECompositionServer::set_timeline_collapsed_layer_tracks(const String& uuid, const String& scene_path, const PackedStringArray& collapsed_layer_ids) {
+		if (uuid.is_empty() || scene_path.is_empty()) {
+			return;
+		}
+		LTESettingsConfig* settings_config = LTESettingsConfig::get_singleton();
+		if (!settings_config) {
+			return;
+		}
+		String scene_key = _get_absolute_scene_path(scene_path);
+		Dictionary scene_settings = settings_config->composition_timeline_scene_settings.get(uuid, Dictionary());
+		Dictionary config = scene_settings.get(scene_key, Dictionary());
+		PackedStringArray normalized_layer_ids = _normalize_packed_string_array(collapsed_layer_ids);
+		config["collapsed_layer_tracks"] = normalized_layer_ids;
+		scene_settings[scene_key] = config;
+		settings_config->composition_timeline_scene_settings[uuid] = scene_settings;
+		settings_config->save_settings_config(false);
 	}
 
 	PackedStringArray LTECompositionServer::get_scene_layers_collapsed_items(const String& uuid, const String& scene_path) const {

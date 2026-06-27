@@ -148,6 +148,7 @@
     <ClInclude Include="src\server\composition_server.h" />
     <ClInclude Include="src\controls\auto_adjust_popup_menu.h" />
     <ClInclude Include="src\controls\editor_panel_container.h" />
+    <ClInclude Include="src\controls\inspector_view_base.h" />
     <ClInclude Include="src\controls\panel_option_button.h" />
     <ClInclude Include="src\controls\time_scrubber.h" />
     <ClInclude Include="src\server\file_system_server.h" />
@@ -193,6 +194,7 @@
     <ClCompile Include="src\server\composition_server.cpp" />
     <ClCompile Include="src\controls\auto_adjust_popup_menu.cpp" />
     <ClCompile Include="src\controls\editor_panel_container.cpp" />
+    <ClCompile Include="src\controls\inspector_view_base.cpp" />
     <ClCompile Include="src\controls\panel_option_button.cpp" />
     <ClCompile Include="src\controls\time_scrubber.cpp" />
     <ClCompile Include="src\server\file_system_server.cpp" />

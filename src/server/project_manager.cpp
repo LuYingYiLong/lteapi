@@ -3,6 +3,7 @@
 #include "composition_server.h"
 #include "graph_editor_server.h"
 #include "note_skin_server.h"
+#include "path_editor_server.h"
 #include "properties_server.h"
 #include "timeline_server.h"
 #include "undo_redo_server.h"
@@ -376,6 +377,9 @@ namespace godot {
 		}
 		if (api->get_note_skin_server()) {
 			api->get_note_skin_server()->clear_project_state();
+		}
+		if (api->get_path_editor_server()) {
+			api->get_path_editor_server()->clear_project_state();
 		}
 		if (api->get_undo_redo()) {
 			api->get_undo_redo()->clear_history();

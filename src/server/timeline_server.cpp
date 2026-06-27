@@ -49,6 +49,7 @@ namespace godot {
         ClassDB::bind_method(D_METHOD("enable_highlight_4k_tracks", "uuid", "enable"), &LTETimelineServer::enable_highlight_4k_tracks);
         ClassDB::bind_method(D_METHOD("set_chart_spacing", "uuid", "spacing"), &LTETimelineServer::set_chart_spacing);
         ClassDB::bind_method(D_METHOD("set_chart_scroll_position", "uuid", "chart_path", "position"), &LTETimelineServer::set_chart_scroll_position);
+        ClassDB::bind_method(D_METHOD("set_chart_collapsed_note_tracks", "uuid", "chart_path", "tracks"), &LTETimelineServer::set_chart_collapsed_note_tracks);
         ClassDB::bind_method(D_METHOD("get_last_opened_chart", "uuid"), &LTETimelineServer::get_last_opened_chart);
         ClassDB::bind_method(D_METHOD("enable_chart_snap_mode", "uuid", "enable"), &LTETimelineServer::enable_chart_snap_mode);
         ClassDB::bind_method(D_METHOD("enable_chart_coverage_mode", "uuid", "enable"), &LTETimelineServer::enable_chart_coverage_mode);
@@ -608,6 +609,8 @@ namespace godot {
         config["chart_playhead"] = chart_list.get(chart_path, 0.0);
         chart_list = settings_config->timeline_panel_chart_scroll_position.get(uuid, Dictionary());
         config["chart_scroll_position"] = chart_list.get(chart_path, Vector2i(-1, -1));
+        chart_list = settings_config->timeline_panel_chart_collapsed_note_tracks.get(uuid, Dictionary());
+        config["collapsed_note_tracks"] = chart_list.get(chart_path, PackedInt32Array());
         return config;
     }
 
@@ -688,6 +691,31 @@ namespace godot {
         }
         scroll_position_dict[chart_path] = position;
         settings_config->timeline_panel_chart_scroll_position[uuid] = scroll_position_dict;
+        settings_config->save_settings_config(false);
+    }
+
+    void LTETimelineServer::set_chart_collapsed_note_tracks(const String& uuid, const String& chart_path, const PackedInt32Array& tracks) {
+        if (uuid.is_empty() || chart_path.is_empty()) {
+            return;
+        }
+
+        PackedInt32Array normalized_tracks;
+        for (int32_t index = 0; index < tracks.size(); index++) {
+            const int32_t track_index = tracks[index];
+            if (track_index < 0 || track_index >= 8 || normalized_tracks.has(track_index)) {
+                continue;
+            }
+            normalized_tracks.append(track_index);
+        }
+        normalized_tracks.sort();
+
+        Dictionary chart_tracks = settings_config->timeline_panel_chart_collapsed_note_tracks.get(uuid, Dictionary());
+        PackedInt32Array current_tracks = chart_tracks.get(chart_path, PackedInt32Array());
+        if (current_tracks == normalized_tracks) {
+            return;
+        }
+        chart_tracks[chart_path] = normalized_tracks;
+        settings_config->timeline_panel_chart_collapsed_note_tracks[uuid] = chart_tracks;
         settings_config->save_settings_config(false);
     }
 

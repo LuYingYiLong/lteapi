@@ -56,6 +56,8 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("set_monitor_snap_settings", "uuid", "snap_settings"), &LTESourceMonitorServer::set_monitor_snap_settings);
 		ClassDB::bind_method(D_METHOD("set_monitor_screen", "uuid", "screen"), &LTESourceMonitorServer::set_monitor_screen);
 		ClassDB::bind_method(D_METHOD("set_monitor_window_mode", "uuid", "mode"), &LTESourceMonitorServer::set_monitor_window_mode);
+	ClassDB::bind_method(D_METHOD("enable_monitor_view_hdr_2d", "uuid", "enable"), &LTESourceMonitorServer::enable_monitor_view_hdr_2d);
+	ClassDB::bind_method(D_METHOD("enable_monitor_game_hdr_2d", "uuid", "enable"), &LTESourceMonitorServer::enable_monitor_game_hdr_2d);
 		ADD_SIGNAL(MethodInfo("game_opened", PropertyInfo(Variant::INT, "difficulty", PROPERTY_HINT_ENUM, "Easy,Hard,Expert,Master"), PropertyInfo(Variant::DICTIONARY, "status")));
 		ADD_SIGNAL(MethodInfo("game_playing", PropertyInfo(Variant::INT, "difficulty", PROPERTY_HINT_ENUM, "Easy,Hard,Expert,Master"), PropertyInfo(Variant::FLOAT, "form_sec"), PropertyInfo(Variant::DICTIONARY, "current_status")));
 		ADD_SIGNAL(MethodInfo("game_paused", PropertyInfo(Variant::INT, "difficulty", PROPERTY_HINT_ENUM, "Easy,Hard,Expert,Master"), PropertyInfo(Variant::DICTIONARY, "current_status")));
@@ -455,6 +457,8 @@ namespace godot {
 		config["snap_settings"] = normalized_snap_settings;
 		config["screen"] = settings_config->source_monitor_screen.get(uuid, DisplayServer::get_singleton()->get_primary_screen());
 		config["window_mode"] = settings_config->source_monitor_window_mode.get(uuid, 0);
+	config["view_hdr_2d"] = settings_config->source_monitor_view_hdr_2d.get(uuid, false);
+	config["game_hdr_2d"] = settings_config->source_monitor_game_hdr_2d.get(uuid, false);
 		return config;
 	}
 
@@ -658,6 +662,7 @@ namespace godot {
 		uint64_t now_msec = Time::get_singleton()->get_ticks_msec();
 		uint64_t last_pause_msec = static_cast<uint64_t>(int64_t(chart_last_pause_msec.get(chart_abs_path, 0)));
 		if (last_pause_msec > 0 && now_msec - last_pause_msec <= PLAY_PAUSE_DOUBLE_TOGGLE_GUARD_MSEC) return;
+		_call_game_method(status_dict, StringName("prewarm_editor_preview"), from_sec);
 		if (!_call_game_method(status_dict, StringName("play"), from_sec)) return;
 		status_dict["time"] = from_sec;
 		status_dict["is_playing"] = true;
@@ -780,6 +785,8 @@ namespace godot {
 		window->set_content_scale_size(Vector2i(1920, 1080));
 		window->set_content_scale_mode(Window::CONTENT_SCALE_MODE_CANVAS_ITEMS);
 		window->set_content_scale_aspect(Window::CONTENT_SCALE_ASPECT_EXPAND);
+		bool game_hdr_2d = settings_config->source_monitor_game_hdr_2d.get(runtime_uuid, false);
+		window->set_use_hdr_2d(game_hdr_2d);
 		// 创建背景
 		bool show_clear_color = settings_config->source_monitor_show_clear_color.get(runtime_uuid, false);
 		if (!show_clear_color) {
@@ -938,6 +945,16 @@ namespace godot {
 
 	void LTESourceMonitorServer::set_monitor_window_mode(const String& uuid, const int mode) {
 		settings_config->source_monitor_window_mode[uuid] = mode;
+		settings_config->save_settings_config();
+	}
+
+	void LTESourceMonitorServer::enable_monitor_view_hdr_2d(const String& uuid, const bool enable) {
+		settings_config->source_monitor_view_hdr_2d[uuid] = enable;
+		settings_config->save_settings_config();
+	}
+
+	void LTESourceMonitorServer::enable_monitor_game_hdr_2d(const String& uuid, const bool enable) {
+		settings_config->source_monitor_game_hdr_2d[uuid] = enable;
 		settings_config->save_settings_config();
 	}
 } // namespace godot

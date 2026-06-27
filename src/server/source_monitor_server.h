@@ -116,6 +116,8 @@ namespace godot {
 		void set_monitor_snap_settings(const String& uuid, const Dictionary& snap_settings);
 		void set_monitor_screen(const String& uuid, const int screen);
 		void set_monitor_window_mode(const String& uuid, const int mode);
+			void enable_monitor_view_hdr_2d(const String& uuid, const bool enable);
+			void enable_monitor_game_hdr_2d(const String& uuid, const bool enable);
 	};
 }
 

@@ -296,7 +296,9 @@ namespace godot {
 		}
 
 		// 重叠检测
-		Array overlaps = helper->find_overlaps(notes);
+		Dictionary overlap_options;
+		overlap_options["allow_hold_body_overlap"] = true;
+		Array overlaps = helper->find_overlaps(notes, overlap_options);
 		for (int32_t i = 0; i < overlaps.size(); ++i) {
 			Dictionary ov = overlaps[i];
 			Dictionary diag;

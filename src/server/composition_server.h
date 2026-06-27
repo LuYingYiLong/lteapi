@@ -54,6 +54,7 @@ namespace godot {
 		Array _normalize_modifiers(const Variant& value) const;
 		Dictionary _normalize_modifier(const Variant& value) const;
 		Array _normalize_vector2_array(const Variant& value, const double fallback_x, const double fallback_y) const;
+		Dictionary _normalize_path_point(const Variant& value) const;
 		String _normalize_color_string(const Variant& value, const String& fallback) const;
 		bool _is_number(const Variant& value) const;
 		bool _try_get_color(const Variant& value, Color& color) const;
@@ -63,10 +64,21 @@ namespace godot {
 		Variant _apply_property_modifiers(const String& property_name, const Variant& value, const Array& modifiers, const double time) const;
 		Variant _apply_shake_modifier(const Variant& value, const Dictionary& modifier, const double time) const;
 		Variant _apply_beat_pulse_modifier(const Variant& value, const Dictionary& modifier, const double time) const;
+		Variant _apply_sine_swing_modifier(const Variant& value, const Dictionary& modifier, const double time) const;
+		Variant _apply_circular_motion_modifier(const Variant& value, const Dictionary& modifier, const double time) const;
+		Variant _apply_spring_impact_modifier(const Variant& value, const Dictionary& modifier, const double time) const;
+		Variant _apply_noise_drift_modifier(const Variant& value, const Dictionary& modifier, const double time) const;
+		Variant _apply_path_following_modifier(const Variant& value, const Dictionary& modifier, const double time) const;
+		Dictionary _sample_path_following_geometry(const Dictionary& modifier, const double time) const;
+		void _apply_path_auto_rotation(Dictionary& state, const Array& local_tracks, const Array& global_tracks, const String& layer_id, const double time) const;
 		Variant _apply_vector_offset(const Variant& value, const double offset_x, const double offset_y) const;
+		Variant _apply_blend_to_value(const Variant& value, const Variant& displacement, const String& blend_mode) const;
+		Variant _multiply_variant_by_displacement(const Variant& value, const double dx, const double dy) const;
 		double _sample_shake_value(const double local_time, const double frequency, const int seed, const int axis) const;
 		double _sample_shake_noise(const double sample_index, const int seed, const int axis) const;
 		double _sample_modifier_fade_weight(const Dictionary& modifier, const double time) const;
+		double _compute_modifier_local_time(const Dictionary& modifier, const double time, double& r_loop_weight) const;
+		double _resolve_bpm_at_time(const Array& bpm_list, const double time, const double fallback_bpm) const;
 		Variant _lerp_variant(const Variant& from, const Variant& to, const double weight) const;
 		Variant _sample_bezier_variant(const Variant& from, const Variant& to, const Dictionary& previous_keyframe, const Dictionary& next_keyframe, const double weight) const;
 		double _sample_bezier_number(const double from, const double to, const Dictionary& previous_keyframe, const Dictionary& next_keyframe, const double weight, const int component_index = -1) const;
@@ -118,6 +130,7 @@ namespace godot {
 		String get_last_opened_composition(const String& uuid) const;
 		void set_last_opened_composition(const String& uuid, const String& scene_path);
 		Dictionary fetch_timeline_config(const String& uuid, const String& scene_path) const;
+		void set_timeline_collapsed_layer_tracks(const String& uuid, const String& scene_path, const PackedStringArray& collapsed_layer_ids);
 		PackedStringArray get_scene_layers_collapsed_items(const String& uuid, const String& scene_path) const;
 		void set_scene_layers_collapsed_items(const String& uuid, const String& scene_path, const PackedStringArray& collapsed_items);
 		Vector2 get_scene_layers_scroll(const String& uuid, const String& scene_path) const;

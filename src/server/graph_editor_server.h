@@ -40,6 +40,7 @@ namespace godot {
 		void set_playhead_auto_scroll(const String& uuid, const bool enable);
 		void set_split_ratio(const String& uuid, const double ratio);
 		void set_curve_view(const String& uuid, const String& curve_id, const Vector2& scroll_offset, const Vector2& content_scale);
+		void set_curve_tree_scroll(const String& uuid, const Vector2& scroll);
 		double find_adjacent_keyframe_time(const Array& keyframe_times, const double current_time, const bool forward) const;
 		Dictionary fetch_speed_graph_model(const String& uuid);
 		Dictionary set_active_chart_path(const String& uuid, const String& chart_path);

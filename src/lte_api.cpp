@@ -15,6 +15,8 @@
 #include "graph_editor_server.h"
 #include "hotkey_tip_server.h"
 #include "note_skin_server.h"
+#include "path_editor_server.h"
+#include "inspector_registry.h"
 #include "plugin_manager.h"
 #include "preferences_manager.h"
 #include "project_manager.h"
@@ -75,6 +77,8 @@ namespace godot {
 		audio_visualizer_server = memnew(LTEAudioVisualizerServer);
 		note_skin_server = memnew(LTENoteSkinServer);
 		backup_server = memnew(LTEBackupServer);
+		path_editor_server = memnew(LTEPathEditorServer);
+		inspector_registry = memnew(LTEInspectorRegistry);
 		user = memnew(LTEUser);
 		plugin_manager = memnew(LTEPluginManager);
 	}
@@ -138,6 +142,14 @@ namespace godot {
 		if (backup_server) {
 			memdelete(backup_server);
 			backup_server = nullptr;
+		}
+		if (path_editor_server) {
+			memdelete(path_editor_server);
+			path_editor_server = nullptr;
+		}
+		if (inspector_registry) {
+			memdelete(inspector_registry);
+			inspector_registry = nullptr;
 		}
 		if (user) {
 			memdelete(user);
@@ -285,11 +297,11 @@ namespace godot {
 		return file_save_server;
 	}
 
-	
+
 	LTESceneLayersServer* LTEAPI::get_scene_layers_server() const {
 		return scene_layers_server;
 	}
-LTECompositionServer* LTEAPI::get_composition_server() const {
+	LTECompositionServer* LTEAPI::get_composition_server() const {
 		return composition_server;
 	}
 
@@ -311,6 +323,14 @@ LTECompositionServer* LTEAPI::get_composition_server() const {
 
 	LTEBackupServer* LTEAPI::get_backup_server() const {
 		return backup_server;
+	}
+
+	LTEPathEditorServer* LTEAPI::get_path_editor_server() const {
+		return path_editor_server;
+	}
+
+	LTEInspectorRegistry* LTEAPI::get_inspector_registry() const {
+		return inspector_registry;
 	}
 
 	LTEUser* LTEAPI::get_user() const {

@@ -122,6 +122,13 @@ namespace godot {
 			"DATA_NAME"
 		);
 		register_component_panel(
+			"019f15b8-7c42-7a31-9b6c-2b3f8c4e51d0",
+			"uid://c7j6lx0i8o6vo",
+			"PATH_EDITOR_NAME",
+			"uid://ctjn7bkoxxr2t",
+			"DATA_NAME"
+		);
+		register_component_panel(
 			"019e1c2a-7f03-7f68-9352-20f9f0041c06",
 			"uid://cvn7s8bowxe2o",
 			"AUDIO_VISUALIZER_NAME",
@@ -191,7 +198,7 @@ namespace godot {
 
 		register_editor_menu_item("files", 2, "OPEN_USER_DATA_FOLDER_NAME", "uid://dcwq3bvau3j4x", open_user_data_folder_options);
 		register_editor_menu_item("files", 5, "OPEN_VIDEO_EXPORT_FOLDER_NAME", "uid://kehph71ddxp8", open_video_export_folder_options);
-		register_editor_menu_item("files", 3, "EXPORT_NAME", "uid://cq52fkc2ma86k", export_project_options);
+		register_editor_menu_item("files", 3, "EXPORT_CHART_NAME", "uid://cq52fkc2ma86k", export_project_options);
 		register_editor_menu_item("files", 4, "VIDEO_EXPORT_NAME", "uid://cyusnjrpfq80w", video_export_options);
 		register_editor_menu_item("files", 6, "BACKUP_CURRENT_PROJECT_NAME", "uid://bh031vfc3253b", backup_current_project_options);
 		register_editor_menu_item("files", 7, "RESTORE_FROM_BACKUP_NAME", "uid://bh031vfc3253b", restore_from_backup_options);
@@ -290,13 +297,44 @@ namespace godot {
 		shake_composition_modifier_options["order"] = 0;
 		shake_composition_modifier_options["graph"] = "TRANSFORM_GRAPH_NAME";
 		shake_composition_modifier_options["properties"] = position_modifier_properties;
-		register_composition_modifier("shake", "SHAKE_MODIFIER_NAME", "res://scenes/editor/properties_panel/modifiers/shake_modifier_properties.tscn", "", shake_composition_modifier_options);
+		register_composition_modifier("shake", "SHAKE_MODIFIER_NAME", "", "", shake_composition_modifier_options);
 
 		Dictionary beat_pulse_composition_modifier_options;
 		beat_pulse_composition_modifier_options["order"] = 1;
 		beat_pulse_composition_modifier_options["graph"] = "RHYTHM_GRAPH_NAME";
 		beat_pulse_composition_modifier_options["properties"] = position_modifier_properties;
-		register_composition_modifier("beat_pulse", "BEAT_PULSE_MODIFIER_NAME", "uid://bgfl0dkp0xuvs", "", beat_pulse_composition_modifier_options);
+		register_composition_modifier("beat_pulse", "BEAT_PULSE_MODIFIER_NAME", "", "", beat_pulse_composition_modifier_options);
+
+		Dictionary sine_swing_composition_modifier_options;
+		sine_swing_composition_modifier_options["order"] = 2;
+		sine_swing_composition_modifier_options["graph"] = "TRANSFORM_GRAPH_NAME";
+		sine_swing_composition_modifier_options["properties"] = position_modifier_properties;
+		register_composition_modifier("sine_swing", "SINE_SWING_MODIFIER_NAME", "", "", sine_swing_composition_modifier_options);
+
+		Dictionary circular_motion_composition_modifier_options;
+		circular_motion_composition_modifier_options["order"] = 3;
+		circular_motion_composition_modifier_options["graph"] = "TRANSFORM_GRAPH_NAME";
+		circular_motion_composition_modifier_options["properties"] = position_modifier_properties;
+		register_composition_modifier("circular_motion", "CIRCULAR_MOTION_MODIFIER_NAME", "", "", circular_motion_composition_modifier_options);
+
+		Dictionary spring_impact_composition_modifier_options;
+		spring_impact_composition_modifier_options["order"] = 4;
+		spring_impact_composition_modifier_options["graph"] = "TRANSFORM_GRAPH_NAME";
+		spring_impact_composition_modifier_options["properties"] = position_modifier_properties;
+		register_composition_modifier("spring_impact", "SPRING_IMPACT_MODIFIER_NAME", "", "", spring_impact_composition_modifier_options);
+
+		Dictionary noise_drift_composition_modifier_options;
+		noise_drift_composition_modifier_options["order"] = 5;
+		noise_drift_composition_modifier_options["graph"] = "TRANSFORM_GRAPH_NAME";
+		noise_drift_composition_modifier_options["properties"] = position_modifier_properties;
+		register_composition_modifier("noise_drift", "NOISE_DRIFT_MODIFIER_NAME", "", "", noise_drift_composition_modifier_options);
+
+		Dictionary path_following_composition_modifier_options;
+		path_following_composition_modifier_options["order"] = 6;
+		path_following_composition_modifier_options["graph"] = "TRANSFORM_GRAPH_NAME";
+		path_following_composition_modifier_options["properties"] = position_modifier_properties;
+		register_composition_modifier("path_following", "PATH_FOLLOWING_MODIFIER_NAME", "", "", path_following_composition_modifier_options);
+
 		_register_core_interpolations();
 	}
 

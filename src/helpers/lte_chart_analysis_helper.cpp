@@ -116,7 +116,7 @@ Dictionary LTEChartAnalysisHelper::analyze_chart(const Dictionary& chart, const 
 	double duration = static_cast<double>(stats["duration"]);
 
 	// 重叠检测辅助
-	Dictionary track_ranges; // key -> Array of {start_beat, end_beat}
+	Dictionary track_heads; // key -> Array of {start_beat, index, key}
 
 	for (int32_t i = 0; i < notes.size(); ++i) {
 		Dictionary note = notes[i];
@@ -174,13 +174,14 @@ Dictionary LTEChartAnalysisHelper::analyze_chart(const Dictionary& chart, const 
 		// 事件时间（用简单的 beat → time 估算，不依赖 ChartHelper）
 		event_times.append(end_beat);
 
-		// 重叠检测数据
-		Dictionary range;
-		range["start_beat"] = start_beat;
-		range["end_beat"] = end_beat;
-		Array ranges = track_ranges.get(key_str, Array());
-		ranges.append(range);
-		track_ranges[key_str] = ranges;
+		// 同一逻辑轨只禁止相同 head，Hold body 重叠合法
+		Dictionary head;
+		head["start_beat"] = start_beat;
+		head["index"] = i;
+		head["key"] = key;
+		Array heads = track_heads.get(key_str, Array());
+		heads.append(head);
+		track_heads[key_str] = heads;
 	}
 
 	stats["tap_quantity"] = tap_quantity;
@@ -188,22 +189,22 @@ Dictionary LTEChartAnalysisHelper::analyze_chart(const Dictionary& chart, const 
 	stats["full_combo"] = full_combo;
 	stats["track_stats"] = track_stats;
 
-	// 重叠检测
-	Array track_keys = track_ranges.keys();
+	// head 冲突检测
+	Array track_keys = track_heads.keys();
 	for (int32_t ti = 0; ti < track_keys.size(); ++ti) {
-		Array ranges = track_ranges[track_keys[ti]];
-		ranges.sort_custom(Callable(this, "_sort_note_range_by_start"));
+		Array heads = track_heads[track_keys[ti]];
+		heads.sort_custom(Callable(this, "_sort_note_range_by_start"));
 
-		double previous_end = -INFINITY;
-		for (int32_t ri = 0; ri < ranges.size(); ++ri) {
-			Dictionary r = ranges[ri];
-			double s = static_cast<double>(r["start_beat"]);
-			double e = static_cast<double>(r["end_beat"]);
-			if (s < previous_end - 0.0001) {
+		double previous_head = -INFINITY;
+		for (int32_t hi = 0; hi < heads.size(); ++hi) {
+			Dictionary head = heads[hi];
+			double current_head = static_cast<double>(head["start_beat"]);
+			if (Math::is_equal_approx(current_head, previous_head)) {
 				_add_diagnostic(diagnostics, "warning", "note_overlap",
-					"Note overlaps with another note on the same track.", ri, s, -1);
+					"Note head conflicts with another note on the same track.",
+					static_cast<int32_t>(head["index"]), current_head, static_cast<int32_t>(head["key"]));
 			}
-			previous_end = MAX(previous_end, e);
+			previous_head = current_head;
 		}
 	}
 

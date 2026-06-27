@@ -6,6 +6,7 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
@@ -105,6 +106,7 @@ namespace godot
 		void enable_highlight_4k_tracks(const String& uuid, const bool enable);
 		void set_chart_spacing(const String& uuid, const double spacing);
 		void set_chart_scroll_position(const String& uuid, const String& chart_path, const Vector2i& position);
+		void set_chart_collapsed_note_tracks(const String& uuid, const String& chart_path, const PackedInt32Array& tracks);
 		String get_last_opened_chart(const String& uuid) const;
 		void enable_chart_snap_mode(const String& uuid, const bool enable);
 		void enable_chart_coverage_mode(const String& uuid, const bool enable);

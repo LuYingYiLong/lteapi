@@ -221,6 +221,9 @@ namespace godot {
 		double fs = static_cast<double>(first_modifier.get("start_time", 0.0));
 		double ss = static_cast<double>(second_modifier.get("start_time", 0.0));
 		if (std::abs(fs - ss) > 0.0001) return fs < ss;
+		double fp = static_cast<double>(first_modifier.get("priority", 0));
+		double sp = static_cast<double>(second_modifier.get("priority", 0));
+		if (std::abs(fp - sp) > 0.0001) return fp < sp;
 		return String(first_modifier.get("id", String())) < String(second_modifier.get("id", String()));
 	}
 

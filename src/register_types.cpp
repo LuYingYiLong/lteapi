@@ -11,6 +11,7 @@
 #include "controls/auto_adjust_popup_menu.h"
 #include "controls/editor_panel_container.h"
 #include "controls/confirm_dialog.h"
+#include "controls/inspector_view_base.h"
 #include "controls/panel_option_button.h"
 #include "controls/stauts_label.h"
 #include "controls/time_scrubber.h"
@@ -38,6 +39,8 @@
 #include "note_skin_importer.h"
 #include "note_skin_resource.h"
 #include "note_skin_server.h"
+#include "path_editor_server.h"
+#include "inspector_registry.h"
 #include "source_monitor_server.h"
 #include "properties_server.h"
 #include "file_system_server.h"
@@ -109,6 +112,7 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(AutoAdjustPopupMenu);
 	GDREGISTER_CLASS(EditorPanelContainer);
 	GDREGISTER_CLASS(LTEConfirmDialog);
+	GDREGISTER_CLASS(LTEInspectorViewBase);
 	GDREGISTER_CLASS(PanelOptionButton);
 	GDREGISTER_CLASS(StautsLabel);
 	GDREGISTER_CLASS(TimeScrubber);
@@ -138,6 +142,8 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(LTENoteSkinResource);
 	GDREGISTER_CLASS(LTENoteSkinServer);
 	GDREGISTER_CLASS(LTEBackupServer);
+	GDREGISTER_CLASS(LTEPathEditorServer);
+	GDREGISTER_CLASS(LTEInspectorRegistry);
 	GDREGISTER_CLASS(LTEUser);
 	GDREGISTER_CLASS(LTEPluginBase);
 	GDREGISTER_CLASS(LTEPluginManifest);
@@ -171,6 +177,8 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	Engine::get_singleton()->register_singleton("LTEAudioVisualizerServer", lte_api_instance->get_audio_visualizer_server());
 	Engine::get_singleton()->register_singleton("LTENoteSkinServer", lte_api_instance->get_note_skin_server());
 	Engine::get_singleton()->register_singleton("LTEBackupServer", lte_api_instance->get_backup_server());
+	Engine::get_singleton()->register_singleton("LTEPathEditorServer", lte_api_instance->get_path_editor_server());
+	Engine::get_singleton()->register_singleton("LTEInspectorRegistry", lte_api_instance->get_inspector_registry());
 	Engine::get_singleton()->register_singleton("LTEUser", lte_api_instance->get_user());
 	Engine::get_singleton()->register_singleton("LTEProjectManager", lte_api_instance->get_project_manager());
 }
@@ -193,6 +201,8 @@ void uninitialize_example_module(ModuleInitializationLevel p_level) {
 		Engine::get_singleton()->unregister_singleton("LTEProjectManager");
 		Engine::get_singleton()->unregister_singleton("LTEUser");
 		Engine::get_singleton()->unregister_singleton("LTEBackupServer");
+		Engine::get_singleton()->unregister_singleton("LTEPathEditorServer");
+		Engine::get_singleton()->unregister_singleton("LTEInspectorRegistry");
 		Engine::get_singleton()->unregister_singleton("LTENoteSkinServer");
 		Engine::get_singleton()->unregister_singleton("LTEAudioVisualizerServer");
 		Engine::get_singleton()->unregister_singleton("LTEShaderServer");

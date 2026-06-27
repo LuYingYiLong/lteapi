@@ -18,6 +18,7 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("set_playhead_auto_scroll", "uuid", "enable"), &LTEGraphEditorServer::set_playhead_auto_scroll);
 		ClassDB::bind_method(D_METHOD("set_split_ratio", "uuid", "ratio"), &LTEGraphEditorServer::set_split_ratio);
 		ClassDB::bind_method(D_METHOD("set_curve_view", "uuid", "curve_id", "scroll_offset", "content_scale"), &LTEGraphEditorServer::set_curve_view);
+		ClassDB::bind_method(D_METHOD("set_curve_tree_scroll", "uuid", "scroll"), &LTEGraphEditorServer::set_curve_tree_scroll);
 		ClassDB::bind_method(D_METHOD("find_adjacent_keyframe_time", "keyframe_times", "current_time", "forward"), &LTEGraphEditorServer::find_adjacent_keyframe_time);
 		ClassDB::bind_method(D_METHOD("fetch_speed_graph_model", "uuid"), &LTEGraphEditorServer::fetch_speed_graph_model);
 		ClassDB::bind_method(D_METHOD("set_active_chart_path", "uuid", "chart_path"), &LTEGraphEditorServer::set_active_chart_path);
@@ -273,6 +274,7 @@ namespace godot {
 			Dictionary view_settings = view_settings_value;
 			config["split_ratio"] = view_settings.get("split_ratio", config["split_ratio"]);
 			config["curve_views"] = view_settings.get("curve_views", config["curve_views"]);
+			config["curve_tree_scroll"] = view_settings.get("curve_tree_scroll", Vector2(-1, -1));
 		}
 		return config;
 	}
@@ -321,6 +323,21 @@ namespace godot {
 		curve_view["content_scale"] = content_scale;
 		curve_views[curve_id] = curve_view;
 		view_settings["curve_views"] = curve_views;
+		settings_config->graph_editor_view_settings[uuid] = view_settings;
+		settings_config->save_settings_config();
+	}
+
+	void LTEGraphEditorServer::set_curve_tree_scroll(const String& uuid, const Vector2& scroll) {
+		if (uuid.is_empty()) {
+			return;
+		}
+		LTESettingsConfig* settings_config = LTESettingsConfig::get_singleton();
+		if (!settings_config) {
+			return;
+		}
+		Dictionary view_settings = settings_config->graph_editor_view_settings.get(uuid, Dictionary());
+		view_settings = view_settings.duplicate(true);
+		view_settings["curve_tree_scroll"] = scroll;
 		settings_config->graph_editor_view_settings[uuid] = view_settings;
 		settings_config->save_settings_config();
 	}
