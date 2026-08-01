@@ -22,6 +22,7 @@ namespace godot {
 
 		Array opened_compositions;
 		mutable Dictionary evaluation_composition_cache;
+		mutable Dictionary runtime_evaluation_plan_cache;
 		int64_t composition_save_revision_counter = 0;
 
 		String _get_absolute_scene_path(const String& scene_path) const;
@@ -95,6 +96,13 @@ namespace godot {
 		Array _evaluate_composition_internal(const String& scene_path, const double time, Array visited_paths) const;
 		Array _evaluate_composition_data_internal(const Dictionary& composition, const String& owner_path, const double time, Array visited_paths) const;
 		void _append_sequence_child_states(Array& states, const Dictionary& state, const double time, Array visited_paths) const;
+		Dictionary _compile_runtime_evaluation_plan(const Dictionary& composition) const;
+		Dictionary _get_runtime_evaluation_plan(const String& scene_path) const;
+		Dictionary _make_compact_runtime_state(const Dictionary& layer) const;
+		Array _evaluate_composition_runtime_internal(const String& scene_path, const double time, Array visited_paths) const;
+		Array _evaluate_composition_runtime_plan_internal(const Dictionary& plan, const String& owner_path, const double time, Array visited_paths) const;
+		void _append_runtime_sequence_child_states(Array& states, const Dictionary& state, const Dictionary& layer_plan, const double time, Array visited_paths) const;
+		void _invalidate_runtime_evaluation_plan(const String& scene_path);
 		void _apply_sequence_parent_state(Dictionary& child_state, const Dictionary& parent_state) const;
 		Dictionary _submit_composition_changes_internal(const String& uuid, const String& scene_path, const Dictionary& new_composition, const bool normalize);
 		bool _apply_composition_keyframe_deltas(Dictionary& composition, const Array& deltas, const bool use_after) const;
@@ -125,6 +133,7 @@ namespace godot {
 		Dictionary apply_composition_keyframe_deltas(const String& uuid, const String& scene_path, const Array& deltas, const bool use_after = true);
 		Dictionary save_composition(const String& uuid, const String& scene_path);
 		Array evaluate_composition(const String& scene_path, const double time) const;
+		Array evaluate_composition_runtime(const String& scene_path, const double time) const;
 		Dictionary normalize_composition(const Variant& value) const;
 		double compute_interpolation_weight(const String& interpolation, const Dictionary& keyframe_data, const double weight) const;
 		String get_last_opened_composition(const String& uuid) const;

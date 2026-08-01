@@ -94,6 +94,7 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("apply_composition_keyframe_deltas", "uuid", "scene_path", "deltas", "use_after"), &LTECompositionServer::apply_composition_keyframe_deltas, DEFVAL(true));
 		ClassDB::bind_method(D_METHOD("save_composition", "uuid", "scene_path"), &LTECompositionServer::save_composition);
 		ClassDB::bind_method(D_METHOD("evaluate_composition", "scene_path", "time"), &LTECompositionServer::evaluate_composition);
+		ClassDB::bind_method(D_METHOD("evaluate_composition_runtime", "scene_path", "time"), &LTECompositionServer::evaluate_composition_runtime);
 		ClassDB::bind_method(D_METHOD("normalize_composition", "value"), &LTECompositionServer::normalize_composition);
 		ClassDB::bind_method(D_METHOD("compute_interpolation_weight", "interpolation", "keyframe_data", "weight"), &LTECompositionServer::compute_interpolation_weight);
 		ClassDB::bind_method(D_METHOD("get_last_opened_composition", "uuid"), &LTECompositionServer::get_last_opened_composition);
@@ -168,6 +169,7 @@ namespace godot {
 		}
 		opened_compositions.clear();
 		evaluation_composition_cache.clear();
+		runtime_evaluation_plan_cache.clear();
 	}
 
 	String LTECompositionServer::_get_absolute_scene_path(const String& scene_path) const {
@@ -271,6 +273,7 @@ namespace godot {
 		opened_composition["composition"] = composition;
 		opened_compositions.append(opened_composition);
 		evaluation_composition_cache[absolute_scene_path] = composition;
+		_invalidate_runtime_evaluation_plan(absolute_scene_path);
 		return opened_composition;
 	}
 
@@ -2081,6 +2084,7 @@ namespace godot {
 		bool require_game_layer = String(composition.get("type", "scene")) != "sequence";
 		composition["layers"] = _normalize_layers(layers, require_game_layer);
 		evaluation_composition_cache[absolute_scene_path] = composition;
+		_invalidate_runtime_evaluation_plan(absolute_scene_path);
 		Error error = _save_composition(absolute_scene_path, composition);
 		if (error != OK) {
 			ERR_PRINT(vformat("Failed to save composition: %s. Error Code: %d", absolute_scene_path, error));
@@ -2119,6 +2123,7 @@ namespace godot {
 		String absolute_scene_path = opened_composition.get("path", _get_absolute_scene_path(scene_path));
 		Dictionary submitted_composition = normalize ? _normalize_composition_data(new_composition) : new_composition.duplicate(true);
 		evaluation_composition_cache[absolute_scene_path] = submitted_composition;
+		_invalidate_runtime_evaluation_plan(absolute_scene_path);
 		Dictionary result;
 		int64_t save_revision = ++composition_save_revision_counter;
 		for (int opened_index = 0; opened_index < opened_compositions.size(); ++opened_index) {
@@ -2166,6 +2171,7 @@ namespace godot {
 		}
 		COMP_PERF_TRACE_END(apply_inner, "apply_composition_keyframe_deltas:_apply_deltas");
 		evaluation_composition_cache[absolute_scene_path] = composition;
+		_invalidate_runtime_evaluation_plan(absolute_scene_path);
 
 		Dictionary result;
 		int64_t save_revision = ++composition_save_revision_counter;
@@ -2555,6 +2561,7 @@ namespace godot {
 		Dictionary composition = _normalize_composition_data(opened_composition.get("composition", Dictionary()));
 		String absolute_scene_path = opened_composition.get("path", _get_absolute_scene_path(scene_path));
 		evaluation_composition_cache[absolute_scene_path] = composition;
+		_invalidate_runtime_evaluation_plan(absolute_scene_path);
 		Error error = _save_composition(absolute_scene_path, composition);
 		if (error != OK) {
 			ERR_PRINT(vformat("Failed to save composition: %s. Error Code: %d", absolute_scene_path, error));
@@ -2581,6 +2588,184 @@ namespace godot {
 			}
 		}
 		return result.is_empty() ? opened_composition.duplicate(true) : result;
+	}
+
+	void LTECompositionServer::_invalidate_runtime_evaluation_plan(const String& scene_path) {
+		String absolute_scene_path = _get_absolute_scene_path(scene_path);
+		if (!absolute_scene_path.is_empty()) {
+			runtime_evaluation_plan_cache.erase(absolute_scene_path);
+		}
+	}
+
+	Dictionary LTECompositionServer::_make_compact_runtime_state(const Dictionary& layer) const {
+		Dictionary state;
+		Array keys = layer.keys();
+		for (int index = 0; index < keys.size(); ++index) {
+			Variant key = keys[index];
+			String key_name = String(key);
+			if (key_name == "property_tracks" || key_name == "clips" || key_name == "composition") {
+				continue;
+			}
+			Variant value = layer.get(key, Variant());
+			if (value.get_type() == Variant::ARRAY) {
+				state[key] = Array(value).duplicate(true);
+			}
+			else if (value.get_type() == Variant::DICTIONARY) {
+				state[key] = Dictionary(value).duplicate(true);
+			}
+			else {
+				state[key] = value;
+			}
+		}
+		return state;
+	}
+
+	Dictionary LTECompositionServer::_compile_runtime_evaluation_plan(const Dictionary& composition) const {
+		Dictionary plan;
+		Array layer_plans;
+		Array layers = composition.get("layers", Array());
+		Array global_tracks = composition.get("property_tracks", Array());
+		for (int layer_index = 0; layer_index < layers.size(); ++layer_index) {
+			if (layers[layer_index].get_type() != Variant::DICTIONARY) {
+				continue;
+			}
+			Dictionary layer = layers[layer_index];
+			String layer_id = layer.get("id", String());
+			Dictionary layer_plan;
+			layer_plan["base_state"] = _make_compact_runtime_state(layer);
+			layer_plan["local_tracks"] = layer.get("property_tracks", Array());
+			Array relevant_global_tracks;
+			for (int track_index = 0; track_index < global_tracks.size(); ++track_index) {
+				if (global_tracks[track_index].get_type() != Variant::DICTIONARY) {
+					continue;
+				}
+				Dictionary track = global_tracks[track_index];
+				String track_layer_id = track.get("layer_id", String());
+				if (track_layer_id.is_empty() || track_layer_id == layer_id) {
+					relevant_global_tracks.append(track);
+				}
+			}
+			layer_plan["global_tracks"] = relevant_global_tracks;
+			if (String(layer.get("type", String())) == "sequence") {
+				layer_plan["clips"] = Array(layer.get("clips", Array())).duplicate(true);
+				String sequence_path = layer.get("sequence_path", String());
+				layer_plan["sequence_path"] = sequence_path;
+				if (sequence_path.is_empty()) {
+					Dictionary embedded_composition = _normalize_embedded_sequence_composition(layer.get("composition", Dictionary()));
+					layer_plan["embedded_plan"] = _compile_runtime_evaluation_plan(embedded_composition);
+				}
+			}
+			layer_plans.append(layer_plan);
+		}
+		plan["layers"] = layer_plans;
+		return plan;
+	}
+
+	Dictionary LTECompositionServer::_get_runtime_evaluation_plan(const String& scene_path) const {
+		String absolute_scene_path = _get_absolute_scene_path(scene_path);
+		if (absolute_scene_path.is_empty()) {
+			return Dictionary();
+		}
+		if (runtime_evaluation_plan_cache.has(absolute_scene_path)) {
+			return runtime_evaluation_plan_cache[absolute_scene_path];
+		}
+		Dictionary composition = _get_composition_for_evaluation(absolute_scene_path);
+		Dictionary plan = _compile_runtime_evaluation_plan(composition);
+		runtime_evaluation_plan_cache[absolute_scene_path] = plan;
+		return plan;
+	}
+
+	Array LTECompositionServer::_evaluate_composition_runtime_internal(const String& scene_path, const double time, Array visited_paths) const {
+		String absolute_scene_path = _get_absolute_scene_path(scene_path);
+		if (absolute_scene_path.is_empty() || visited_paths.has(absolute_scene_path)) {
+			return Array();
+		}
+		visited_paths.append(absolute_scene_path);
+		Dictionary plan = _get_runtime_evaluation_plan(absolute_scene_path);
+		return _evaluate_composition_runtime_plan_internal(plan, absolute_scene_path, time, visited_paths);
+	}
+
+	Array LTECompositionServer::_evaluate_composition_runtime_plan_internal(const Dictionary& plan, const String& owner_path, const double time, Array visited_paths) const {
+		if (!owner_path.is_empty() && !visited_paths.has(owner_path)) {
+			visited_paths.append(owner_path);
+		}
+		Array layer_plans = plan.get("layers", Array());
+		Array states;
+		for (int index = 0; index < layer_plans.size(); ++index) {
+			if (layer_plans[index].get_type() != Variant::DICTIONARY) {
+				continue;
+			}
+			Dictionary layer_plan = layer_plans[index];
+			Dictionary state = Dictionary(layer_plan.get("base_state", Dictionary())).duplicate(true);
+			String layer_id = state.get("id", String());
+			Array local_tracks = layer_plan.get("local_tracks", Array());
+			Array global_tracks = layer_plan.get("global_tracks", Array());
+			_apply_property_tracks(state, local_tracks, layer_id, time);
+			_apply_property_tracks(state, global_tracks, layer_id, time);
+			_apply_path_auto_rotation(state, local_tracks, global_tracks, layer_id, time);
+			state["index"] = index;
+			// Track samples may reference Array/Dictionary values owned by keyframes.
+			// Duplicate only the compact runtime state so callers cannot mutate source data.
+			state = state.duplicate(true);
+			states.append(state);
+			if (String(state.get("type", String())) == "sequence") {
+				_append_runtime_sequence_child_states(states, state, layer_plan, time, visited_paths);
+			}
+		}
+		return states;
+	}
+
+	void LTECompositionServer::_append_runtime_sequence_child_states(Array& states, const Dictionary& state, const Dictionary& layer_plan, const double time, Array visited_paths) const {
+		if (!bool(state.get("visible", true))) {
+			return;
+		}
+		String sequence_path = layer_plan.get("sequence_path", String());
+		String sequence_id = state.get("id", String());
+		Array clips = layer_plan.get("clips", Array());
+		for (int clip_index = 0; clip_index < clips.size(); ++clip_index) {
+			if (clips[clip_index].get_type() != Variant::DICTIONARY) {
+				continue;
+			}
+			Dictionary clip = clips[clip_index];
+			double start_time = double(clip.get("start_time", state.get("start_time", 0.0)));
+			double duration = double(clip.get("duration", state.get("duration", 0.0)));
+			if (duration > 0.0 && (time < start_time || time > start_time + duration)) {
+				continue;
+			}
+			double time_scale = double(clip.get("time_scale", state.get("time_scale", 1.0)));
+			if (std::abs(time_scale) < 0.000001) {
+				time_scale = 1.0;
+			}
+			double local_time = (time - start_time) * time_scale + double(clip.get("time_offset", state.get("time_offset", 0.0)));
+			String clip_id = String(clip.get("id", String::num_int64(clip_index)));
+			Array child_visited_paths = visited_paths.duplicate(false);
+			Array child_states;
+			if (!sequence_path.is_empty()) {
+				child_states = _evaluate_composition_runtime_internal(sequence_path, local_time, child_visited_paths);
+			}
+			else {
+				Dictionary embedded_plan = layer_plan.get("embedded_plan", Dictionary());
+				child_states = _evaluate_composition_runtime_plan_internal(embedded_plan, "embedded:" + sequence_id + ":" + clip_id, local_time, child_visited_paths);
+			}
+			for (int index = 0; index < child_states.size(); ++index) {
+				if (child_states[index].get_type() != Variant::DICTIONARY) {
+					continue;
+				}
+				Dictionary child_state = child_states[index];
+				_apply_sequence_parent_state(child_state, state);
+				String child_id = child_state.get("id", String());
+				child_state["source_id"] = child_id;
+				child_state["sequence_id"] = sequence_id;
+				child_state["sequence_clip_id"] = clip_id;
+				if (!sequence_path.is_empty()) {
+					child_state["sequence_path"] = _get_absolute_scene_path(sequence_path);
+				}
+				if (!sequence_id.is_empty() && !child_id.is_empty()) {
+					child_state["id"] = sequence_id + "/" + clip_id + "/" + child_id;
+				}
+				states.append(child_state);
+			}
+		}
 	}
 
 	Array LTECompositionServer::_evaluate_composition_internal(const String& scene_path, const double time, Array visited_paths) const {
@@ -2700,6 +2885,10 @@ namespace godot {
 
 	Array LTECompositionServer::evaluate_composition(const String& scene_path, const double time) const {
 		return _evaluate_composition_internal(scene_path, time, Array());
+	}
+
+	Array LTECompositionServer::evaluate_composition_runtime(const String& scene_path, const double time) const {
+		return _evaluate_composition_runtime_internal(scene_path, time, Array());
 	}
 
 	Dictionary LTECompositionServer::normalize_composition(const Variant& value) const {
