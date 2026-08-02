@@ -5,6 +5,7 @@
 #include "preferences_manager.h"
 #include "project_manager.h"
 #include "settings_config.h"
+#include "undo_redo_server.h"
 #include "utils.h"
 
 #include <algorithm>
@@ -91,6 +92,7 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("set_composition_layers", "scene_path", "layers"), &LTECompositionServer::set_composition_layers);
 		ClassDB::bind_method(D_METHOD("submit_composition_changes", "uuid", "scene_path", "new_composition"), &LTECompositionServer::submit_composition_changes);
 		ClassDB::bind_method(D_METHOD("submit_normalized_composition_changes", "uuid", "scene_path", "new_composition"), &LTECompositionServer::submit_normalized_composition_changes);
+		ClassDB::bind_method(D_METHOD("submit_auto_property_keyframes", "uuid", "scene_path", "time", "values_by_layer_id"), &LTECompositionServer::submit_auto_property_keyframes);
 		ClassDB::bind_method(D_METHOD("apply_composition_keyframe_deltas", "uuid", "scene_path", "deltas", "use_after"), &LTECompositionServer::apply_composition_keyframe_deltas, DEFVAL(true));
 		ClassDB::bind_method(D_METHOD("save_composition", "uuid", "scene_path"), &LTECompositionServer::save_composition);
 		ClassDB::bind_method(D_METHOD("evaluate_composition", "scene_path", "time"), &LTECompositionServer::evaluate_composition);
@@ -2112,6 +2114,128 @@ namespace godot {
 
 	Dictionary LTECompositionServer::submit_normalized_composition_changes(const String& uuid, const String& scene_path, const Dictionary& new_composition) {
 		return _submit_composition_changes_internal(uuid, scene_path, new_composition, false);
+	}
+
+	Dictionary LTECompositionServer::submit_auto_property_keyframes(const String& uuid, const String& scene_path, const double time, const Dictionary& values_by_layer_id) {
+		Dictionary result;
+		result["enabled"] = false;
+		result["changed"] = false;
+		result["key_refs"] = Array();
+		if (uuid.is_empty() || scene_path.is_empty()) {
+			return result;
+		}
+
+		Dictionary timeline_config = fetch_timeline_config(uuid, scene_path);
+		if (!bool(timeline_config.get("auto_insert_keyframes_mode", false))) {
+			return result;
+		}
+		result["enabled"] = true;
+		result["uuid"] = uuid;
+		if (values_by_layer_id.is_empty()) {
+			return result;
+		}
+
+		Dictionary composition = get_composition(scene_path);
+		Array layers = composition.get("layers", Array());
+		Array deltas;
+		Array key_refs;
+		const double keyframe_time = std::max(time, 0.0);
+		Array requested_layer_ids = values_by_layer_id.keys();
+		for (int layer_request_index = 0; layer_request_index < requested_layer_ids.size(); ++layer_request_index) {
+			String layer_id = requested_layer_ids[layer_request_index];
+			Variant values_variant = values_by_layer_id.get(layer_id, Variant());
+			if (layer_id.is_empty() || values_variant.get_type() != Variant::DICTIONARY) {
+				continue;
+			}
+			int32_t layer_index = _find_layer_index_by_id(layers, layer_id);
+			if (layer_index < 0 || layers[layer_index].get_type() != Variant::DICTIONARY) {
+				continue;
+			}
+			Dictionary layer = layers[layer_index];
+			if (bool(layer.get("locked", false))) {
+				continue;
+			}
+
+			Dictionary requested_values = values_variant;
+			Array property_names = requested_values.keys();
+			Array property_tracks = layer.get("property_tracks", Array());
+			for (int property_index = 0; property_index < property_names.size(); ++property_index) {
+				String property_name = property_names[property_index];
+				if (property_name.is_empty()) {
+					continue;
+				}
+				int32_t property_track_index = _find_property_track_index(property_tracks, property_name);
+				if (!layer.has(property_name) && property_track_index < 0) {
+					continue;
+				}
+
+				Dictionary property_track;
+				Array keyframes;
+				if (property_track_index >= 0 && property_tracks[property_track_index].get_type() == Variant::DICTIONARY) {
+					property_track = property_tracks[property_track_index];
+					keyframes = property_track.get("keyframes", Array());
+				}
+				int32_t keyframe_index = _find_keyframe_index(keyframes, String(), keyframe_time, true);
+				Dictionary before_keyframe;
+				Dictionary after_keyframe;
+				String keyframe_id;
+				if (keyframe_index >= 0 && keyframes[keyframe_index].get_type() == Variant::DICTIONARY) {
+					before_keyframe = Dictionary(keyframes[keyframe_index]).duplicate(true);
+					after_keyframe = before_keyframe.duplicate(true);
+					keyframe_id = before_keyframe.get("id", String());
+				}
+				else {
+					keyframe_id = Utils::uuid(Utils::UUID_V7);
+					after_keyframe["id"] = keyframe_id;
+					after_keyframe["interpolation"] = "linear";
+				}
+				if (keyframe_id.is_empty()) {
+					keyframe_id = Utils::uuid(Utils::UUID_V7);
+					after_keyframe["id"] = keyframe_id;
+				}
+				after_keyframe["time"] = keyframe_time;
+				after_keyframe["value"] = requested_values.get(property_name, Variant());
+
+				Dictionary key_ref;
+				key_ref["id"] = keyframe_id;
+				key_ref["kind"] = "text_property_key";
+				key_ref["layer_id"] = layer_id;
+				key_ref["property"] = property_name;
+				key_ref["time"] = keyframe_time;
+				key_refs.append(key_ref);
+
+				if (!before_keyframe.is_empty()
+						&& std::abs(double(before_keyframe.get("time", 0.0)) - keyframe_time) <= 0.0001
+						&& Variant(before_keyframe.get("value", Variant())).hash_compare(after_keyframe.get("value", Variant()))) {
+					continue;
+				}
+				Dictionary delta;
+				delta["layer_id"] = layer_id;
+				delta["property"] = property_name;
+				delta["keyframe_id"] = keyframe_id;
+				delta["before"] = before_keyframe.is_empty() ? Variant() : Variant(before_keyframe);
+				delta["after"] = after_keyframe;
+				deltas.append(delta);
+			}
+		}
+
+		result["key_refs"] = key_refs;
+		if (deltas.is_empty()) {
+			return result;
+		}
+
+		LTEUndoRedo* undo_redo = LTEUndoRedo::get_singleton();
+		if (undo_redo) {
+			undo_redo->create_action("composition_auto_insert_property_keyframes");
+			undo_redo->add_do_method(Callable(this, "apply_composition_keyframe_deltas").bind(uuid, scene_path, deltas, true));
+			undo_redo->add_undo_method(Callable(this, "apply_composition_keyframe_deltas").bind(uuid, scene_path, deltas, false));
+			undo_redo->commit_action(true);
+		}
+		else {
+			apply_composition_keyframe_deltas(uuid, scene_path, deltas, true);
+		}
+		result["changed"] = true;
+		return result;
 	}
 
 	Dictionary LTECompositionServer::_submit_composition_changes_internal(const String& uuid, const String& scene_path, const Dictionary& new_composition, const bool normalize) {

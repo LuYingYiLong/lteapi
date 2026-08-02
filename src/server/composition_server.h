@@ -130,6 +130,7 @@ namespace godot {
 		Dictionary set_composition_layers(const String& scene_path, const Array& layers);
 		Dictionary submit_composition_changes(const String& uuid, const String& scene_path, const Dictionary& new_composition);
 		Dictionary submit_normalized_composition_changes(const String& uuid, const String& scene_path, const Dictionary& new_composition);
+		Dictionary submit_auto_property_keyframes(const String& uuid, const String& scene_path, const double time, const Dictionary& values_by_layer_id);
 		Dictionary apply_composition_keyframe_deltas(const String& uuid, const String& scene_path, const Array& deltas, const bool use_after = true);
 		Dictionary save_composition(const String& uuid, const String& scene_path);
 		Array evaluate_composition(const String& scene_path, const double time) const;
