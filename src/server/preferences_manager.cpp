@@ -59,8 +59,8 @@ namespace godot {
 
         PackedStringArray language_enum;
         language_enum.append("en");
-        language_enum.append("ch");
-        language_enum.append("cht");
+        language_enum.append("zh");
+        language_enum.append("zh_Hant");
         Ref<LTEPreferenceConfigHandle> editor_language = create_pref_config_handle(
             "core.editor_language",
             LTEPreferenceConfigSchema::PREF_CONFIG_TYPE_ENUM,
@@ -69,6 +69,12 @@ namespace godot {
             "EDITOR_LANGUAGE_TOOLTIP",
             "INTERFACE_NAME"
         );
+        const String saved_editor_language = String(editor_language->get_value());
+        if (saved_editor_language == "ch") {
+            editor_language->set_value("zh");
+        } else if (saved_editor_language == "cht") {
+            editor_language->set_value("zh_Hant");
+        }
 
         Ref<LTEPreferenceConfigHandle> editor_keymap = create_pref_config_handle(
             "core.editor_keymap",
