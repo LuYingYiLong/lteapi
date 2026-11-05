@@ -95,8 +95,8 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("submit_auto_property_keyframes", "uuid", "scene_path", "time", "values_by_layer_id"), &LTECompositionServer::submit_auto_property_keyframes);
 		ClassDB::bind_method(D_METHOD("apply_composition_keyframe_deltas", "uuid", "scene_path", "deltas", "use_after"), &LTECompositionServer::apply_composition_keyframe_deltas, DEFVAL(true));
 		ClassDB::bind_method(D_METHOD("save_composition", "uuid", "scene_path"), &LTECompositionServer::save_composition);
-		ClassDB::bind_method(D_METHOD("evaluate_composition", "scene_path", "time"), &LTECompositionServer::evaluate_composition);
-		ClassDB::bind_method(D_METHOD("evaluate_composition_runtime", "scene_path", "time"), &LTECompositionServer::evaluate_composition_runtime);
+		ClassDB::bind_method(D_METHOD("evaluate_composition", "scene_path", "time", "project_root"), &LTECompositionServer::evaluate_composition, DEFVAL(String()));
+		ClassDB::bind_method(D_METHOD("evaluate_composition_runtime", "scene_path", "time", "project_root"), &LTECompositionServer::evaluate_composition_runtime, DEFVAL(String()));
 		ClassDB::bind_method(D_METHOD("normalize_composition", "value"), &LTECompositionServer::normalize_composition);
 		ClassDB::bind_method(D_METHOD("compute_interpolation_weight", "interpolation", "keyframe_data", "weight"), &LTECompositionServer::compute_interpolation_weight);
 		ClassDB::bind_method(D_METHOD("get_last_opened_composition", "uuid"), &LTECompositionServer::get_last_opened_composition);
@@ -174,14 +174,19 @@ namespace godot {
 		runtime_evaluation_plan_cache.clear();
 	}
 
-	String LTECompositionServer::_get_absolute_scene_path(const String& scene_path) const {
+	String LTECompositionServer::_get_absolute_scene_path(const String& scene_path, const String& project_root) const {
 		String normalized_path = scene_path.replace("\\", "/");
 		if (normalized_path.is_empty()) {
 			return String();
 		}
 		LTEProjectManager* project_manager = LTEProjectManager::get_singleton();
-		String root_path = project_manager ? project_manager->get_project_path().replace("\\", "/").simplify_path() : String();
+		String root_path = project_root.is_empty() && project_manager ? project_manager->get_project_path() : project_root;
+		root_path = root_path.replace("\\", "/").simplify_path();
 		if (normalized_path.begins_with("/") && !root_path.is_empty()) {
+			String root_prefix = root_path.ends_with("/") ? root_path : root_path + "/";
+			if (normalized_path == root_path || normalized_path.begins_with(root_prefix)) {
+				return normalized_path.simplify_path();
+			}
 			return (root_path + normalized_path).simplify_path();
 		}
 		if (Utils::is_absolute_path(normalized_path)) {
@@ -193,9 +198,10 @@ namespace godot {
 		return root_path.path_join(normalized_path).simplify_path();
 	}
 
-	bool LTECompositionServer::_is_opened_composition_in_current_project(const Dictionary& opened_composition) const {
+	bool LTECompositionServer::_is_opened_composition_in_current_project(const Dictionary& opened_composition, const String& project_root) const {
 		LTEProjectManager* project_manager = LTEProjectManager::get_singleton();
-		String root_path = project_manager ? project_manager->get_project_path().replace("\\", "/").simplify_path() : String();
+		String root_path = project_root.is_empty() && project_manager ? project_manager->get_project_path() : project_root;
+		root_path = root_path.replace("\\", "/").simplify_path();
 		if (root_path.is_empty()) {
 			return false;
 		}
@@ -205,7 +211,7 @@ namespace godot {
 			return opened_project_path.to_lower() == root_path.to_lower();
 		}
 
-		String opened_scene_path = _get_absolute_scene_path(opened_composition.get("path", String())).replace("\\", "/").simplify_path();
+		String opened_scene_path = _get_absolute_scene_path(opened_composition.get("path", String()), project_root).replace("\\", "/").simplify_path();
 		if (opened_scene_path.is_empty()) {
 			return false;
 		}
@@ -245,14 +251,14 @@ namespace godot {
 		return -1;
 	}
 
-	int LTECompositionServer::_find_first_opened_composition_index(const String& scene_path) const {
-		String target_path = _get_absolute_scene_path(scene_path);
+	int LTECompositionServer::_find_first_opened_composition_index(const String& scene_path, const String& project_root) const {
+		String target_path = _get_absolute_scene_path(scene_path, project_root);
 		for (int index = 0; index < opened_compositions.size(); ++index) {
 			Dictionary opened_composition = opened_compositions[index];
-			if (!_is_opened_composition_in_current_project(opened_composition)) {
+			if (!_is_opened_composition_in_current_project(opened_composition, project_root)) {
 				continue;
 			}
-			String opened_path = _get_absolute_scene_path(opened_composition.get("path", String()));
+			String opened_path = _get_absolute_scene_path(opened_composition.get("path", String()), project_root);
 			if (opened_path == target_path) {
 				return index;
 			}
@@ -287,12 +293,12 @@ namespace godot {
 		return _normalize_composition_data(parsed);
 	}
 
-	Dictionary LTECompositionServer::_get_composition_for_evaluation(const String& scene_path) const {
-		String absolute_scene_path = _get_absolute_scene_path(scene_path);
+	Dictionary LTECompositionServer::_get_composition_for_evaluation(const String& scene_path, const String& project_root) const {
+		String absolute_scene_path = _get_absolute_scene_path(scene_path, project_root);
 		if (absolute_scene_path.is_empty()) {
 			return Dictionary();
 		}
-		int index = _find_first_opened_composition_index(absolute_scene_path);
+		int index = _find_first_opened_composition_index(absolute_scene_path, project_root);
 		if (index >= 0) {
 			Dictionary opened_composition = opened_compositions[index];
 			Dictionary composition = opened_composition.get("composition", Dictionary());
@@ -2785,31 +2791,31 @@ namespace godot {
 		return plan;
 	}
 
-	Dictionary LTECompositionServer::_get_runtime_evaluation_plan(const String& scene_path) const {
-		String absolute_scene_path = _get_absolute_scene_path(scene_path);
+	Dictionary LTECompositionServer::_get_runtime_evaluation_plan(const String& scene_path, const String& project_root) const {
+		String absolute_scene_path = _get_absolute_scene_path(scene_path, project_root);
 		if (absolute_scene_path.is_empty()) {
 			return Dictionary();
 		}
 		if (runtime_evaluation_plan_cache.has(absolute_scene_path)) {
 			return runtime_evaluation_plan_cache[absolute_scene_path];
 		}
-		Dictionary composition = _get_composition_for_evaluation(absolute_scene_path);
+		Dictionary composition = _get_composition_for_evaluation(absolute_scene_path, project_root);
 		Dictionary plan = _compile_runtime_evaluation_plan(composition);
 		runtime_evaluation_plan_cache[absolute_scene_path] = plan;
 		return plan;
 	}
 
-	Array LTECompositionServer::_evaluate_composition_runtime_internal(const String& scene_path, const double time, Array visited_paths) const {
-		String absolute_scene_path = _get_absolute_scene_path(scene_path);
+	Array LTECompositionServer::_evaluate_composition_runtime_internal(const String& scene_path, const double time, Array visited_paths, const String& project_root) const {
+		String absolute_scene_path = _get_absolute_scene_path(scene_path, project_root);
 		if (absolute_scene_path.is_empty() || visited_paths.has(absolute_scene_path)) {
 			return Array();
 		}
 		visited_paths.append(absolute_scene_path);
-		Dictionary plan = _get_runtime_evaluation_plan(absolute_scene_path);
-		return _evaluate_composition_runtime_plan_internal(plan, absolute_scene_path, time, visited_paths);
+		Dictionary plan = _get_runtime_evaluation_plan(absolute_scene_path, project_root);
+		return _evaluate_composition_runtime_plan_internal(plan, absolute_scene_path, time, visited_paths, project_root);
 	}
 
-	Array LTECompositionServer::_evaluate_composition_runtime_plan_internal(const Dictionary& plan, const String& owner_path, const double time, Array visited_paths) const {
+	Array LTECompositionServer::_evaluate_composition_runtime_plan_internal(const Dictionary& plan, const String& owner_path, const double time, Array visited_paths, const String& project_root) const {
 		if (!owner_path.is_empty() && !visited_paths.has(owner_path)) {
 			visited_paths.append(owner_path);
 		}
@@ -2833,13 +2839,13 @@ namespace godot {
 			state = state.duplicate(true);
 			states.append(state);
 			if (String(state.get("type", String())) == "sequence") {
-				_append_runtime_sequence_child_states(states, state, layer_plan, time, visited_paths);
+				_append_runtime_sequence_child_states(states, state, layer_plan, time, visited_paths, project_root);
 			}
 		}
 		return states;
 	}
 
-	void LTECompositionServer::_append_runtime_sequence_child_states(Array& states, const Dictionary& state, const Dictionary& layer_plan, const double time, Array visited_paths) const {
+	void LTECompositionServer::_append_runtime_sequence_child_states(Array& states, const Dictionary& state, const Dictionary& layer_plan, const double time, Array visited_paths, const String& project_root) const {
 		if (!bool(state.get("visible", true))) {
 			return;
 		}
@@ -2865,11 +2871,11 @@ namespace godot {
 			Array child_visited_paths = visited_paths.duplicate(false);
 			Array child_states;
 			if (!sequence_path.is_empty()) {
-				child_states = _evaluate_composition_runtime_internal(sequence_path, local_time, child_visited_paths);
+				child_states = _evaluate_composition_runtime_internal(sequence_path, local_time, child_visited_paths, project_root);
 			}
 			else {
 				Dictionary embedded_plan = layer_plan.get("embedded_plan", Dictionary());
-				child_states = _evaluate_composition_runtime_plan_internal(embedded_plan, "embedded:" + sequence_id + ":" + clip_id, local_time, child_visited_paths);
+				child_states = _evaluate_composition_runtime_plan_internal(embedded_plan, "embedded:" + sequence_id + ":" + clip_id, local_time, child_visited_paths, project_root);
 			}
 			for (int index = 0; index < child_states.size(); ++index) {
 				if (child_states[index].get_type() != Variant::DICTIONARY) {
@@ -2882,7 +2888,7 @@ namespace godot {
 				child_state["sequence_id"] = sequence_id;
 				child_state["sequence_clip_id"] = clip_id;
 				if (!sequence_path.is_empty()) {
-					child_state["sequence_path"] = _get_absolute_scene_path(sequence_path);
+					child_state["sequence_path"] = _get_absolute_scene_path(sequence_path, project_root);
 				}
 				if (!sequence_id.is_empty() && !child_id.is_empty()) {
 					child_state["id"] = sequence_id + "/" + clip_id + "/" + child_id;
@@ -2892,17 +2898,17 @@ namespace godot {
 		}
 	}
 
-	Array LTECompositionServer::_evaluate_composition_internal(const String& scene_path, const double time, Array visited_paths) const {
-		String absolute_scene_path = _get_absolute_scene_path(scene_path);
+	Array LTECompositionServer::_evaluate_composition_internal(const String& scene_path, const double time, Array visited_paths, const String& project_root) const {
+		String absolute_scene_path = _get_absolute_scene_path(scene_path, project_root);
 		if (absolute_scene_path.is_empty() || visited_paths.has(absolute_scene_path)) {
 			return Array();
 		}
 		visited_paths.append(absolute_scene_path);
-		Dictionary composition = _get_composition_for_evaluation(absolute_scene_path);
-		return _evaluate_composition_data_internal(composition, absolute_scene_path, time, visited_paths);
+		Dictionary composition = _get_composition_for_evaluation(absolute_scene_path, project_root);
+		return _evaluate_composition_data_internal(composition, absolute_scene_path, time, visited_paths, project_root);
 	}
 
-	Array LTECompositionServer::_evaluate_composition_data_internal(const Dictionary& composition, const String& owner_path, const double time, Array visited_paths) const {
+	Array LTECompositionServer::_evaluate_composition_data_internal(const Dictionary& composition, const String& owner_path, const double time, Array visited_paths, const String& project_root) const {
 		if (!owner_path.is_empty() && !visited_paths.has(owner_path)) {
 			visited_paths.append(owner_path);
 		}
@@ -2923,13 +2929,13 @@ namespace godot {
 			state["index"] = index;
 			states.append(state);
 			if (String(state.get("type", String())) == "sequence") {
-				_append_sequence_child_states(states, state, time, visited_paths);
+				_append_sequence_child_states(states, state, time, visited_paths, project_root);
 			}
 		}
 		return states;
 	}
 
-	void LTECompositionServer::_append_sequence_child_states(Array& states, const Dictionary& state, const double time, Array visited_paths) const {
+	void LTECompositionServer::_append_sequence_child_states(Array& states, const Dictionary& state, const double time, Array visited_paths, const String& project_root) const {
 		if (!bool(state.get("visible", true))) {
 			return;
 		}
@@ -2958,11 +2964,11 @@ namespace godot {
 			Array child_visited_paths = visited_paths.duplicate(true);
 			Array child_states;
 			if (!sequence_path.is_empty()) {
-				child_states = _evaluate_composition_internal(sequence_path, local_time, child_visited_paths);
+				child_states = _evaluate_composition_internal(sequence_path, local_time, child_visited_paths, project_root);
 			}
 			else {
 				Dictionary embedded_composition = _normalize_embedded_sequence_composition(state.get("composition", Dictionary()));
-				child_states = _evaluate_composition_data_internal(embedded_composition, "embedded:" + sequence_id + ":" + clip_id, local_time, child_visited_paths);
+				child_states = _evaluate_composition_data_internal(embedded_composition, "embedded:" + sequence_id + ":" + clip_id, local_time, child_visited_paths, project_root);
 			}
 			for (int index = 0; index < child_states.size(); ++index) {
 				if (child_states[index].get_type() != Variant::DICTIONARY) {
@@ -2975,7 +2981,7 @@ namespace godot {
 				child_state["sequence_id"] = sequence_id;
 				child_state["sequence_clip_id"] = clip_id;
 				if (!sequence_path.is_empty()) {
-					child_state["sequence_path"] = _get_absolute_scene_path(sequence_path);
+					child_state["sequence_path"] = _get_absolute_scene_path(sequence_path, project_root);
 				}
 				if (!sequence_id.is_empty() && !child_id.is_empty()) {
 					child_state["id"] = sequence_id + "/" + clip_id + "/" + child_id;
@@ -3007,12 +3013,12 @@ namespace godot {
 		child_state["rotation"] = double(child_state.get("rotation", 0.0)) + parent_rotation;
 	}
 
-	Array LTECompositionServer::evaluate_composition(const String& scene_path, const double time) const {
-		return _evaluate_composition_internal(scene_path, time, Array());
+	Array LTECompositionServer::evaluate_composition(const String& scene_path, const double time, const String& project_root) const {
+		return _evaluate_composition_internal(scene_path, time, Array(), project_root);
 	}
 
-	Array LTECompositionServer::evaluate_composition_runtime(const String& scene_path, const double time) const {
-		return _evaluate_composition_runtime_internal(scene_path, time, Array());
+	Array LTECompositionServer::evaluate_composition_runtime(const String& scene_path, const double time, const String& project_root) const {
+		return _evaluate_composition_runtime_internal(scene_path, time, Array(), project_root);
 	}
 
 	Dictionary LTECompositionServer::normalize_composition(const Variant& value) const {

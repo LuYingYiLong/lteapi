@@ -65,7 +65,17 @@ Owns source monitor preview/runtime playback.
 - Opens game preview scenes for a difficulty.
 - Controls preview play, pause, scrub, hot reload, and external runtime windows.
 - Owns source-monitor-specific config such as ratio, judgement line, auto play, debug info, screen, and window mode.
+- Independent game windows use a 1152×648 logical reference with viewport stretching and expand aspect, matching the player UI coordinate system. Project-manager direct game windows use the same policy.
 - Does not edit chart data or persist timeline playhead state.
+
+## LTECompositionServer
+
+Owns composition snapshots, layer/property-track evaluation, and sequence expansion.
+
+- `evaluate_composition(scene_path, time, project_root)` and `evaluate_composition_runtime(scene_path, time, project_root)` accept an optional project root for external sequence paths.
+- Player callers supply their chart/package root explicitly. Nested external and embedded sequences keep that context throughout evaluation.
+- Omitting the root preserves the editor's current-project behavior. Evaluation does not open projects or change `LTEProjectManager` state.
+- Runtime plans retain source paths and resolve sequence references in the calling context; different project roots cannot share a relative sequence lookup.
 
 ## LTEPropertiesServer
 

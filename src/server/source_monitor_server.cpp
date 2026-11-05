@@ -782,8 +782,8 @@ namespace godot {
 		int32_t screen = settings_config->source_monitor_screen.get(runtime_uuid, DisplayServer::get_singleton()->get_primary_screen());
 		window->set_current_screen(screen);
 		window->set_initial_position(Window::WINDOW_INITIAL_POSITION_CENTER_OTHER_SCREEN);
-		window->set_content_scale_size(Vector2i(1920, 1080));
-		window->set_content_scale_mode(Window::CONTENT_SCALE_MODE_CANVAS_ITEMS);
+		window->set_content_scale_size(Vector2i(1152, 648));
+		window->set_content_scale_mode(Window::CONTENT_SCALE_MODE_VIEWPORT);
 		window->set_content_scale_aspect(Window::CONTENT_SCALE_ASPECT_EXPAND);
 		bool game_hdr_2d = settings_config->source_monitor_game_hdr_2d.get(runtime_uuid, false);
 		window->set_use_hdr_2d(game_hdr_2d);

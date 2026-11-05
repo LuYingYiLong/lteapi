@@ -720,8 +720,8 @@ namespace godot {
 		Window* window = workspace_manager->create_empty_window(Vector2i(1152, 648), vformat("%s-%s", track_name, track_illustrator), false);
 		if (!window) return ERR_CANT_CREATE;
 		// 设置窗口属性
-		window->set_content_scale_size(Vector2i(1920, 1080));
-		window->set_content_scale_mode(Window::CONTENT_SCALE_MODE_CANVAS_ITEMS);
+		window->set_content_scale_size(Vector2i(1152, 648));
+		window->set_content_scale_mode(Window::CONTENT_SCALE_MODE_VIEWPORT);
 		window->set_content_scale_aspect(Window::CONTENT_SCALE_ASPECT_EXPAND);
 		// 创建背景
 		Ref<PackedScene> packed_bg = Utils::load<PackedScene>("uid://bictapl04k1aa");
