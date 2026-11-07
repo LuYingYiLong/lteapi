@@ -173,6 +173,7 @@
     <ClInclude Include="src\server\timeline_server.h" />
     <ClInclude Include="src\util\utils.h" />
     <ClInclude Include="src\util\zip_helper.h" />
+    <ClInclude Include="src\util\lightech_zip_reader.h" />
     <ClInclude Include="src\helpers\composition_patch_helper.h" />
     <ClInclude Include="src\helpers\composition_signature_helper.h" />
     <ClInclude Include="src\helpers\lte_chart_note_helper.h" />
@@ -216,6 +217,7 @@
     <ClCompile Include="src\server\timeline_server.cpp" />
     <ClCompile Include="src\util\utils.cpp" />
     <ClCompile Include="src\util\zip_helper.cpp" />
+    <ClCompile Include="src\util\lightech_zip_reader.cpp" />
     <ClCompile Include="src\helpers\composition_patch_helper.cpp" />
     <ClCompile Include="src\helpers\composition_signature_helper.cpp" />
     <ClCompile Include="src\helpers\lte_chart_note_helper.cpp" />

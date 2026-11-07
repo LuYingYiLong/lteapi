@@ -19,6 +19,7 @@
 #include "chart_data.h"
 #include "chart_helper.h"
 #include "zip_helper.h"
+#include "lightech_zip_reader.h"
 #include "settings_config.h"
 #include "shader_server.h"
 #include "component_registry.h"
@@ -111,6 +112,7 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(ChartHelper);
 	GDREGISTER_CLASS(ChartData);
 	GDREGISTER_CLASS(ZipHelper);
+	GDREGISTER_CLASS(LightechZipReader);
 	GDREGISTER_CLASS(AutoAdjustPopupMenu);
 	GDREGISTER_CLASS(EditorPanelContainer);
 	GDREGISTER_CLASS(LTEConfirmDialog);

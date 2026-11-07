@@ -165,6 +165,9 @@
     <ClInclude Include="src\util\zip_helper.h">
       <Filter>Header File\utils</Filter>
     </ClInclude>
+    <ClInclude Include="src\util\lightech_zip_reader.h">
+      <Filter>Header File\utils</Filter>
+    </ClInclude>
     <ClInclude Include="src\classes\base_random.h">
       <Filter>Header File\classes</Filter>
     </ClInclude>
@@ -315,6 +318,9 @@
       <Filter>Source File\utils</Filter>
     </ClCompile>
     <ClCompile Include="src\util\zip_helper.cpp">
+      <Filter>Source File\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="src\util\lightech_zip_reader.cpp">
       <Filter>Source File\utils</Filter>
     </ClCompile>
     <ClCompile Include="src\classes\base_random.cpp">
