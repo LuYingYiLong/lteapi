@@ -51,12 +51,19 @@ Owns editor layout and panel/window orchestration.
 
 ## LTETimelineServer
 
-Owns chart editing session state.
+Owns chart editing session state and shares one ChartData per resolved chart path in the open project.
 
-- Opens chart files and tracks unsaved chart snapshots.
-- Owns timeline config, playhead, columns, per-bar settings, markers, in/out points, undo, and redo.
+- Keeps a separate ChartHelper for each panel and chart so grid subdivision remains panel-specific.
+- Owns timeline config, playhead, columns, markers, in/out points, undo, redo, and save scheduling.
 - Emits chart lifecycle/playhead signals.
+- Builds legacy opened-chart dictionaries from the shared document at the time of each query or signal.
 - Does not play audio/game previews or scan project files.
+
+## ChartData
+
+- Owns the in-memory chart snapshot, its content revision, and its saved revision.
+- Exposes independent snapshots for readers. Edits go through LTETimelineServer.
+- Supplies chart timing to ChartHelper. LTEFileSaveServer writes the serialized snapshot.
 
 ## LTESourceMonitorServer
 

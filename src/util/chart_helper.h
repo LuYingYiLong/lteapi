@@ -35,6 +35,8 @@ namespace godot
 		double row_total = 0.0;
 
 		static Ref<ChartHelper> open(const String& path);
+		static Ref<ChartHelper> from_dictionary(const Dictionary& chart);
+		void update_from_chart(const Dictionary& chart);
 		double time_to_row(const double time_sec);
 		double row_to_time(const double row);
 		double time_to_beat(const double time_sec);

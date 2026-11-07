@@ -4,6 +4,7 @@
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
@@ -11,13 +12,10 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
-#include <condition_variable>
 #include <cstdint>
-#include <mutex>
-#include <thread>
 #include <vector>
 
-#include "chart_helper.h"
+#include "chart_data.h"
 #include "settings_config.h"
 #include "utils.h"
 
@@ -32,55 +30,41 @@ namespace godot
 
 		static LTETimelineServer* singleton;
 
+		struct ChartDocument {
+			String absolute_path;
+			Ref<ChartData> data;
+		};
+
+		struct OpenedChart {
+			String uuid;
+			String path;
+			String path_key;
+			Array column_config;
+			Ref<ChartData> data;
+			Ref<ChartHelper> helper;
+		};
+
 		LTESettingsConfig* settings_config = nullptr;
-		Array opened_charts;
+		HashMap<String, ChartDocument> chart_documents;
+		std::vector<OpenedChart> opened_charts;
 		bool submitting_chart_change = false;
-		bool chart_save_worker_running = false;
-		bool chart_save_worker_stop_requested = false;
-		int32_t active_chart_save_count = 0;
-		int64_t chart_save_revision_counter = 0;
-		int64_t active_chart_save_revision = -1;
-		String active_chart_save_path;
 
-		struct AsyncChartSaveJob {
-			String uuid;
-			String chart_path;
-			String absolute_path;
-			Dictionary chart;
-			int64_t revision = 0;
-		};
-
-		struct AsyncChartSaveResult {
-			String uuid;
-			String chart_path;
-			String absolute_path;
-			int64_t revision = 0;
-			Error error = OK;
-		};
-
-		std::mutex chart_save_mutex;
-		std::condition_variable chart_save_condition;
-		std::thread chart_save_worker;
-		std::vector<AsyncChartSaveJob> pending_chart_saves;
-		std::vector<AsyncChartSaveResult> completed_chart_saves;
-
-		Dictionary _record_chart_data(const String& uuid, const String& chart_path);
+		const OpenedChart* _record_chart_data(const String& uuid, const String& chart_path);
+		const OpenedChart* _find_opened_chart(const String& uuid, const String& chart_path) const;
+		Dictionary _make_chart_info(const OpenedChart& opened_chart) const;
 		void _apply_chart_change(Dictionary p_opened_chart, Dictionary p_target_chart);
+		void _apply_chart_snapshot(String chart_path, Ref<ChartData> data, Dictionary snapshot);
 		bool _is_chart_auto_save_enabled() const;
-		void _start_chart_save_worker();
-		void _stop_chart_save_worker();
 		int32_t _get_auto_save_delay_msec() const;
-		void _queue_chart_save(const Dictionary& opened_chart, const int32_t delay_msec = CHART_SAVE_COALESCE_DELAY_MS);
-		String _make_chart_save_tag(const String& uuid, const String& chart_path, const int64_t revision) const;
-		bool _parse_chart_save_tag(const String& tag, String& r_uuid, String& r_chart_path, int64_t& r_revision) const;
+		void _queue_chart_save(const String& chart_path, const Ref<ChartData>& data, const int32_t delay_msec = CHART_SAVE_COALESCE_DELAY_MS);
+		bool _parse_chart_save_tag(const String& tag, String& r_chart_path, int64_t& r_document_id, int64_t& r_revision) const;
+		Ref<ChartData> _find_saved_document(const String& absolute_path, int64_t document_id) const;
 		void _on_file_saved(const String& path, const String& tag, const int64_t revision);
 		void _on_file_save_failed(const String& path, const String& tag, const int64_t revision, const int64_t error);
-		void _chart_save_worker_loop();
-		void _flush_async_chart_save_results();
-		Error _save_chart_snapshot_atomic(const String& path, const Dictionary& chart) const;
 		int _find_single_in_point(const String& chart_path);
+		String _get_project_path() const;
 		String _get_absolute_chart_path(const String& chart_path) const;
-		bool _is_opened_chart_in_current_project(const Dictionary& opened_chart) const;
+		Ref<ChartHelper> _get_chart_helper_for_path(const String& chart_path) const;
 		String _resolve_chart_setting_key(const Dictionary& chart_dict, const String& chart_path) const;
 		// 辅助排序函数
 		bool _sort_in_out_compare(const Variant& a, const Variant& b) const;
@@ -99,6 +83,7 @@ namespace godot
 		Dictionary fetch_timeline_config(const String& uuid, const String& chart_path) const;
 		void open_chart(const String& uuid, const String& chart_path);
 		Array get_opened_chart_list();
+		Ref<ChartData> get_chart_data(const String& chart_path) const;
 		Ref<ChartHelper> get_chart_helper(const String& uuid, const String& chart_path);
 		void enable_playhead_auto_scroll(const String& uuid, const bool enable);
 		void enable_show_audio_waveform(const String& uuid, const bool enable);

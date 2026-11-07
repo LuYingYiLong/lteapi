@@ -4,6 +4,7 @@
 namespace godot {
 	void ChartHelper::_bind_methods() {
 		ClassDB::bind_static_method("ChartHelper", D_METHOD("open", "path"), &ChartHelper::open);
+		ClassDB::bind_static_method("ChartHelper", D_METHOD("from_dictionary", "chart"), &ChartHelper::from_dictionary);
 		ClassDB::bind_method(D_METHOD("time_to_row", "time_sec"), &ChartHelper::time_to_row);
 		ClassDB::bind_method(D_METHOD("row_to_time", "row"), &ChartHelper::row_to_time);
 		ClassDB::bind_method(D_METHOD("time_to_beat", "time_sec"), &ChartHelper::time_to_beat);
@@ -163,16 +164,29 @@ namespace godot {
 	Ref<ChartHelper> ChartHelper::open(const String& path) {
 		Dictionary chart = Utils::load_json_file(path);
 		if (chart.is_empty()) return nullptr;
+		return from_dictionary(chart);
+	}
+
+	Ref<ChartHelper> ChartHelper::from_dictionary(const Dictionary& chart) {
 		Ref<ChartHelper> chart_helper;
 		chart_helper.instantiate();
-		chart_helper->bpms = chart.get("bpm", Array());
-		Dictionary metadata = chart.get("metadata", Dictionary());
-		chart_helper->duration = metadata.get("duration", 0.0);
-		chart_helper->_calculate_beat_total();
-		chart_helper->_calculate_row_total();
-		chart_helper->_build_time_to_beat_map();
-		chart_helper->_build_beat_to_time_map();
+		chart_helper->update_from_chart(chart);
 		return chart_helper;
+	}
+
+	void ChartHelper::update_from_chart(const Dictionary& chart) {
+		Array chart_bpms = chart.get("bpm", Array());
+		Dictionary metadata = chart.get("metadata", Dictionary());
+		double chart_duration = metadata.get("duration", 0.0);
+		if (bpms == chart_bpms && duration == chart_duration) {
+			return;
+		}
+		bpms = chart_bpms.duplicate(true);
+		duration = chart_duration;
+		_calculate_beat_total();
+		_calculate_row_total();
+		_build_time_to_beat_map();
+		_build_beat_to_time_map();
 	}
 
 	double ChartHelper::time_to_row(const double time_sec) {

@@ -5,8 +5,7 @@
 #include "project_manager.h"
 #include "undo_redo_server.h"
 
-#include <chrono>
-
+#include <godot_cpp/variant/callable_method_pointer.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 
 namespace godot {
@@ -14,6 +13,14 @@ namespace godot {
 
     namespace {
         const char TIMELINE_PANEL_PER_BAR_PRESETS_PREF_KEY[] = "core.timeline_panel_per_bar_presets";
+
+        String chart_path_key(const String& absolute_path) {
+#ifdef _WIN32
+            return absolute_path.to_lower();
+#else
+            return absolute_path;
+#endif
+        }
 
         Array get_timeline_panel_per_bar_presets(const Array& fallback) {
             LTEPreferencesManager* preferences_manager = LTEPreferencesManager::get_singleton();
@@ -36,12 +43,13 @@ namespace godot {
         ClassDB::bind_method(D_METHOD("_apply_chart_change", "opened_chart", "target_chart"), &LTETimelineServer::_apply_chart_change);
         ClassDB::bind_method(D_METHOD("_on_file_saved", "path", "tag", "revision"), &LTETimelineServer::_on_file_saved);
         ClassDB::bind_method(D_METHOD("_on_file_save_failed", "path", "tag", "revision", "error"), &LTETimelineServer::_on_file_save_failed);
-        ClassDB::bind_method(D_METHOD("_flush_async_chart_save_results"), &LTETimelineServer::_flush_async_chart_save_results);
+        ClassDB::bind_method(D_METHOD("_flush_async_chart_save_results"), &LTETimelineServer::flush_pending_chart_saves);
         ClassDB::bind_method(D_METHOD("_sort_in_out_compare", "a", "b"), &LTETimelineServer::_sort_in_out_compare);
         ClassDB::bind_method(D_METHOD("_sort_markers_compare", "a", "b"), &LTETimelineServer::_sort_markers_compare);
         ClassDB::bind_method(D_METHOD("fetch_timeline_config", "uuid", "chart_path"), &LTETimelineServer::fetch_timeline_config);
         ClassDB::bind_method(D_METHOD("open_chart", "uuid", "chart_path"), &LTETimelineServer::open_chart);
         ClassDB::bind_method(D_METHOD("get_opened_chart_list"), &LTETimelineServer::get_opened_chart_list);
+        ClassDB::bind_method(D_METHOD("get_chart_data", "chart_path"), &LTETimelineServer::get_chart_data);
         ClassDB::bind_method(D_METHOD("get_chart_helper", "uuid", "chart_path"), &LTETimelineServer::get_chart_helper);
         ClassDB::bind_method(D_METHOD("enable_playhead_auto_scroll", "uuid", "enable"), &LTETimelineServer::enable_playhead_auto_scroll);
         ClassDB::bind_method(D_METHOD("enable_show_audio_waveform", "uuid", "enable"), &LTETimelineServer::enable_show_audio_waveform);
@@ -98,34 +106,39 @@ namespace godot {
             PropertyInfo(Variant::FLOAT, "time")));
     }
 
-    Dictionary LTETimelineServer::_record_chart_data(const String& uuid, const String& chart_path) {
-        Dictionary chart = Utils::load_json_file(chart_path);
-        if (chart.is_empty()) return Dictionary();
+    const LTETimelineServer::OpenedChart* LTETimelineServer::_record_chart_data(const String& uuid, const String& chart_path) {
+        String absolute_path = _get_absolute_chart_path(chart_path);
+        if (absolute_path.is_empty()) {
+            return nullptr;
+        }
+        String path_key = chart_path_key(absolute_path);
+        const ChartDocument* document = chart_documents.getptr(path_key);
+        if (!document) {
+            Dictionary chart = Utils::load_json_file(absolute_path);
+            if (chart.is_empty()) {
+                return nullptr;
+            }
+            document = &chart_documents.insert(path_key, { absolute_path, ChartData::from_dictionary(chart) })->value;
+        }
 
-        Dictionary opened_chart;
-        opened_chart["uuid"] = uuid;
-        opened_chart["path"] = chart_path;
-        LTEProjectManager* project_manager = LTEProjectManager::get_singleton();
-        opened_chart["project_path"] = project_manager ? project_manager->get_project_path().replace("\\", "/").simplify_path() : String();
-        opened_chart["saved"] = true;
-        opened_chart["save_revision"] = 0;
-        opened_chart["chart"] = chart;
-
+        OpenedChart opened_chart;
+        opened_chart.uuid = uuid;
+        opened_chart.path = chart_path;
+        opened_chart.path_key = path_key;
+        opened_chart.data = document->data;
+        opened_chart.helper = document->data->create_helper();
         Dictionary col_cfg_dict = settings_config->timeline_panel_chart_column_configs.get(uuid, Dictionary());
-        opened_chart["column_config"] = col_cfg_dict.get(chart_path, Array());
+        opened_chart.column_config = col_cfg_dict.get(chart_path, Array());
 
-        Ref<ChartHelper> helper = ChartHelper::open(chart_path);
         settings_config->timeline_panel_last_opened[uuid] = chart_path;
 
         Dictionary per_bar_dict = settings_config->timeline_panel_chart_per_bar.get(uuid, Dictionary());
-        if (!per_bar_dict.has(chart_path)) {
-            per_bar_dict[chart_path] = 4;
-            helper->set_per_bar(4);
+        String per_bar_key = _resolve_chart_setting_key(per_bar_dict, chart_path);
+        if (!per_bar_dict.has(per_bar_key)) {
+            per_bar_dict[per_bar_key] = 4;
             settings_config->timeline_panel_chart_per_bar[uuid] = per_bar_dict;
         }
-        else {
-            helper->set_per_bar(per_bar_dict.get(chart_path, 4));
-        }
+        opened_chart.helper->set_per_bar(per_bar_dict.get(per_bar_key, 4));
 
         Dictionary playhead_dict = settings_config->timeline_panel_chart_playhead.get(uuid, Dictionary());
         if (!playhead_dict.has(chart_path)) {
@@ -133,41 +146,71 @@ namespace godot {
             settings_config->timeline_panel_chart_playhead[uuid] = playhead_dict;
         }
 
-        opened_chart["chart_helper"] = helper;
-        opened_charts.append(opened_chart);
-        return opened_chart;
+        opened_charts.push_back(opened_chart);
+        return &opened_charts.back();
+    }
+
+    const LTETimelineServer::OpenedChart* LTETimelineServer::_find_opened_chart(const String& uuid, const String& chart_path) const {
+        if (_get_project_path().is_empty()) {
+            return nullptr;
+        }
+        String path_key = chart_path_key(_get_absolute_chart_path(chart_path));
+        for (const OpenedChart& opened_chart : opened_charts) {
+            if (opened_chart.uuid == uuid && opened_chart.path_key == path_key) {
+                return &opened_chart;
+            }
+        }
+        return nullptr;
+    }
+
+    Dictionary LTETimelineServer::_make_chart_info(const OpenedChart& opened_chart) const {
+        Dictionary info;
+        info["uuid"] = opened_chart.uuid;
+        info["path"] = opened_chart.path;
+        info["project_path"] = _get_project_path();
+        info["chart"] = opened_chart.data->get_snapshot();
+        info["saved"] = !opened_chart.data->is_dirty();
+        info["save_revision"] = opened_chart.data->get_revision();
+        info["column_config"] = opened_chart.column_config;
+        info["chart_helper"] = opened_chart.helper;
+        return info;
     }
 
     void LTETimelineServer::_apply_chart_change(Dictionary p_opened_chart, Dictionary p_target_chart) {
-        // 注意：这里必须执行 duplicate(true)，否则 UndoRedo 历史栈里存的将是引用，
-        // 后续修改会导致历史记录也跟着变，深拷贝能保证快照独立。
-        String changed_chart_path = p_opened_chart.get("path", String());
-        String target_chart_path = _get_absolute_chart_path(changed_chart_path);
-        int64_t change_revision = ++chart_save_revision_counter;
-        bool changed_any = false;
-        for (int32_t index = 0; index < opened_charts.size(); index++) {
-            Dictionary opened_chart = opened_charts[index];
-            if (!_is_opened_chart_in_current_project(opened_chart)) {
-                continue;
-            }
-            String opened_chart_path = opened_chart.get("path", String());
-            if (opened_chart_path != changed_chart_path && _get_absolute_chart_path(opened_chart_path) != target_chart_path) {
-                continue;
-            }
-            opened_chart["chart"] = p_target_chart.duplicate(true);
-            opened_chart["saved"] = false;
-            opened_chart["save_revision"] = change_revision;
-            emit_signal("chart_history_changed", opened_chart.get("uuid", String()), opened_chart_path, opened_chart);
-            changed_any = true;
+        const OpenedChart* opened_chart = _find_opened_chart(p_opened_chart.get("uuid", String()), p_opened_chart.get("path", String()));
+        if (!opened_chart) {
+            return;
         }
-        if (!changed_any) {
-            p_opened_chart["chart"] = p_target_chart.duplicate(true);
-            p_opened_chart["saved"] = false;
-            p_opened_chart["save_revision"] = change_revision;
-            emit_signal("chart_history_changed", p_opened_chart.get("uuid", String()), changed_chart_path, p_opened_chart);
+        Ref<ChartHelper> helper = p_opened_chart.get("chart_helper", Variant());
+        if (helper.is_valid() && helper != opened_chart->helper) {
+            return;
+        }
+        _apply_chart_snapshot(opened_chart->path, opened_chart->data, p_target_chart);
+    }
+
+    void LTETimelineServer::_apply_chart_snapshot(String chart_path, Ref<ChartData> data, Dictionary snapshot) {
+        if (get_chart_data(chart_path) != data) {
+            return;
+        }
+
+        data->replace_snapshot(snapshot);
+        int64_t applied_revision = data->get_revision();
+        Array changed_views;
+        for (const OpenedChart& opened_chart : opened_charts) {
+            if (opened_chart.data == data) {
+                data->refresh_helper(opened_chart.helper);
+                changed_views.append(_make_chart_info(opened_chart));
+            }
+        }
+        for (int64_t index = 0; index < changed_views.size(); ++index) {
+            Dictionary info = changed_views[index];
+            emit_signal("chart_history_changed", info["uuid"], info["path"], info);
+            if (data->get_revision() != applied_revision || get_chart_data(chart_path) != data) {
+                return;
+            }
         }
         if (!submitting_chart_change && _is_chart_auto_save_enabled()) {
-            _queue_chart_save(p_opened_chart, _get_auto_save_delay_msec());
+            _queue_chart_save(chart_path, data, _get_auto_save_delay_msec());
         }
     }
 
@@ -185,275 +228,65 @@ namespace godot {
         return static_cast<int32_t>(interval * 1000.0);
     }
 
-    void LTETimelineServer::_start_chart_save_worker() {
-        if (chart_save_worker_running) {
-            return;
-        }
-        chart_save_worker_stop_requested = false;
-        chart_save_worker_running = true;
-        chart_save_worker = std::thread(&LTETimelineServer::_chart_save_worker_loop, this);
-    }
-
-    void LTETimelineServer::_stop_chart_save_worker() {
-        {
-            std::lock_guard<std::mutex> lock(chart_save_mutex);
-            chart_save_worker_stop_requested = true;
-        }
-        chart_save_condition.notify_all();
-        if (chart_save_worker.joinable()) {
-            chart_save_worker.join();
-        }
-        chart_save_worker_running = false;
-    }
-
-    void LTETimelineServer::_queue_chart_save(const Dictionary& opened_chart, const int32_t delay_msec) {
-        AsyncChartSaveJob job;
-        job.uuid = opened_chart.get("uuid", String());
-        job.chart_path = opened_chart.get("path", String());
-        job.absolute_path = _get_absolute_chart_path(job.chart_path);
-        Dictionary chart = opened_chart.get("chart", Dictionary());
-        job.chart = chart.duplicate(true);
-        job.revision = static_cast<int64_t>(opened_chart.get("save_revision", 0));
-        if (job.absolute_path.is_empty()) {
-            return;
-        }
-
+    void LTETimelineServer::_queue_chart_save(const String& chart_path, const Ref<ChartData>& data, const int32_t delay_msec) {
+        const ChartDocument* document = chart_documents.getptr(chart_path_key(_get_absolute_chart_path(chart_path)));
         LTEFileSaveServer* file_save_server = LTEFileSaveServer::get_singleton();
-        if (!file_save_server) {
+        if (!document || document->data != data || !file_save_server) {
             return;
         }
-        file_save_server->queue_json_save(job.absolute_path, job.chart, "", _make_chart_save_tag(job.uuid, job.chart_path, job.revision), delay_msec, true);
+
+        String tag = "chart\n" + chart_path + "\n" + String::num_int64(data->get_instance_id()) + "\n" + String::num_int64(data->get_revision());
+        file_save_server->queue_json_save_no_copy(document->absolute_path, data->get_snapshot(), "", tag, delay_msec, true);
     }
 
-    String LTETimelineServer::_make_chart_save_tag(const String& uuid, const String& chart_path, const int64_t revision) const {
-        return "chart\n" + uuid + "\n" + chart_path + "\n" + String::num_int64(revision);
-    }
-
-    bool LTETimelineServer::_parse_chart_save_tag(const String& tag, String& r_uuid, String& r_chart_path, int64_t& r_revision) const {
+    bool LTETimelineServer::_parse_chart_save_tag(const String& tag, String& r_chart_path, int64_t& r_document_id, int64_t& r_revision) const {
         PackedStringArray parts = tag.split("\n", false);
         if (parts.size() != 4 || parts[0] != "chart") {
             return false;
         }
-        r_uuid = parts[1];
-        r_chart_path = parts[2];
+        r_chart_path = parts[1];
+        r_document_id = parts[2].to_int();
         r_revision = parts[3].to_int();
         return true;
     }
 
+    Ref<ChartData> LTETimelineServer::_find_saved_document(const String& absolute_path, int64_t document_id) const {
+        if (_get_project_path().is_empty()) {
+            return nullptr;
+        }
+        const ChartDocument* document = chart_documents.getptr(chart_path_key(absolute_path));
+        if (document && document->data->get_instance_id() == static_cast<uint64_t>(document_id)) {
+            return document->data;
+        }
+        return nullptr;
+    }
+
     void LTETimelineServer::_on_file_saved(const String& path, const String& tag, const int64_t revision) {
-        String uuid;
         String chart_path;
+        int64_t document_id = 0;
         int64_t chart_revision = 0;
-        if (!_parse_chart_save_tag(tag, uuid, chart_path, chart_revision)) {
+        if (!_parse_chart_save_tag(tag, chart_path, document_id, chart_revision)) {
             return;
         }
-        String target_chart_path = _get_absolute_chart_path(chart_path);
-        bool saved_any = false;
-        for (int32_t index = 0; index < opened_charts.size(); index++) {
-            Dictionary opened_chart = opened_charts[index];
-            if (!_is_opened_chart_in_current_project(opened_chart)) {
-                continue;
-            }
-            String opened_chart_path = opened_chart.get("path", String());
-            if (opened_chart_path != chart_path && _get_absolute_chart_path(opened_chart_path) != target_chart_path) {
-                continue;
-            }
-            int64_t current_revision = static_cast<int64_t>(opened_chart.get("save_revision", 0));
-            if (current_revision != chart_revision) {
-                continue;
-            }
-            opened_chart["saved"] = true;
-            saved_any = true;
-        }
-        if (saved_any) {
+        Ref<ChartData> data = _find_saved_document(path, document_id);
+        if (data.is_valid() && data->confirm_saved(chart_revision)) {
             emit_signal("chart_saved", chart_path);
         }
     }
 
     void LTETimelineServer::_on_file_save_failed(const String& path, const String& tag, const int64_t revision, const int64_t error) {
-        String uuid;
         String chart_path;
+        int64_t document_id = 0;
         int64_t chart_revision = 0;
-        if (!_parse_chart_save_tag(tag, uuid, chart_path, chart_revision)) {
+        if (!_parse_chart_save_tag(tag, chart_path, document_id, chart_revision)) {
             return;
         }
-        String target_chart_path = _get_absolute_chart_path(chart_path);
-        for (int32_t index = 0; index < opened_charts.size(); index++) {
-            Dictionary opened_chart = opened_charts[index];
-            if (!_is_opened_chart_in_current_project(opened_chart)) {
-                continue;
-            }
-            String opened_chart_path = opened_chart.get("path", String());
-            if (opened_chart_path != chart_path && _get_absolute_chart_path(opened_chart_path) != target_chart_path) {
-                continue;
-            }
-            int64_t current_revision = static_cast<int64_t>(opened_chart.get("save_revision", 0));
-            if (current_revision == chart_revision) {
-                opened_chart["saved"] = false;
-            }
+        Ref<ChartData> data = _find_saved_document(path, document_id);
+        if (data.is_valid()) {
+            data->mark_save_failed(chart_revision);
         }
         ERR_PRINT(vformat("Failed to save chart file: %s. Error Code: %d", path, error));
         emit_signal("chart_save_failed", chart_path, error);
-    }
-
-    void LTETimelineServer::_chart_save_worker_loop() {
-        while (true) {
-            AsyncChartSaveJob job;
-            {
-                std::unique_lock<std::mutex> lock(chart_save_mutex);
-                chart_save_condition.wait(lock, [this]() {
-                    return chart_save_worker_stop_requested || !pending_chart_saves.empty();
-                });
-                if (chart_save_worker_stop_requested && pending_chart_saves.empty()) {
-                    break;
-                }
-                if (!chart_save_worker_stop_requested) {
-                    chart_save_condition.wait_for(lock, std::chrono::milliseconds(CHART_SAVE_COALESCE_DELAY_MS), [this]() {
-                        return chart_save_worker_stop_requested;
-                    });
-                }
-                if (chart_save_worker_stop_requested && pending_chart_saves.empty()) {
-                    break;
-                }
-                if (pending_chart_saves.empty()) {
-                    continue;
-                }
-                job = pending_chart_saves.front();
-                pending_chart_saves.erase(pending_chart_saves.begin());
-                ++active_chart_save_count;
-                active_chart_save_path = job.absolute_path;
-                active_chart_save_revision = job.revision;
-            }
-
-            AsyncChartSaveResult result;
-            result.uuid = job.uuid;
-            result.chart_path = job.chart_path;
-            result.absolute_path = job.absolute_path;
-            result.revision = job.revision;
-            result.error = _save_chart_snapshot_atomic(job.absolute_path, job.chart);
-
-            bool should_defer_flush = false;
-            {
-                std::lock_guard<std::mutex> lock(chart_save_mutex);
-                completed_chart_saves.push_back(result);
-                --active_chart_save_count;
-                active_chart_save_path = String();
-                active_chart_save_revision = -1;
-                should_defer_flush = !chart_save_worker_stop_requested;
-            }
-            if (should_defer_flush) {
-                call_deferred("_flush_async_chart_save_results");
-            }
-        }
-    }
-
-    void LTETimelineServer::_flush_async_chart_save_results() {
-        std::vector<AsyncChartSaveResult> results;
-        {
-            std::lock_guard<std::mutex> lock(chart_save_mutex);
-            results.swap(completed_chart_saves);
-        }
-        for (const AsyncChartSaveResult& result : results) {
-            if (result.error == OK) {
-                String target_chart_path = _get_absolute_chart_path(result.chart_path);
-                bool saved_any = false;
-                for (int32_t index = 0; index < opened_charts.size(); index++) {
-                    Dictionary opened_chart = opened_charts[index];
-                    if (!_is_opened_chart_in_current_project(opened_chart)) {
-                        continue;
-                    }
-                    String opened_chart_path = opened_chart.get("path", String());
-                    if (opened_chart_path != result.chart_path && _get_absolute_chart_path(opened_chart_path) != target_chart_path) {
-                        continue;
-                    }
-                    int64_t current_revision = static_cast<int64_t>(opened_chart.get("save_revision", 0));
-                    if (current_revision != result.revision) {
-                        continue;
-                    }
-                    opened_chart["saved"] = true;
-                    saved_any = true;
-                }
-                if (saved_any) {
-                    emit_signal("chart_saved", result.chart_path);
-                }
-            }
-            else {
-                String target_chart_path = _get_absolute_chart_path(result.chart_path);
-                for (int32_t index = 0; index < opened_charts.size(); index++) {
-                    Dictionary opened_chart = opened_charts[index];
-                    if (!_is_opened_chart_in_current_project(opened_chart)) {
-                        continue;
-                    }
-                    String opened_chart_path = opened_chart.get("path", String());
-                    if (opened_chart_path != result.chart_path && _get_absolute_chart_path(opened_chart_path) != target_chart_path) {
-                        continue;
-                    }
-                    int64_t current_revision = static_cast<int64_t>(opened_chart.get("save_revision", 0));
-                    if (current_revision == result.revision) {
-                        opened_chart["saved"] = false;
-                    }
-                }
-                ERR_PRINT(vformat("Failed to save chart file: %s. Error Code: %d", result.absolute_path, result.error));
-                emit_signal("chart_save_failed", result.chart_path, static_cast<int64_t>(result.error));
-            }
-        }
-    }
-
-    Error LTETimelineServer::_save_chart_snapshot_atomic(const String& path, const Dictionary& chart) const {
-        if (path.is_empty()) {
-            return ERR_INVALID_PARAMETER;
-        }
-
-        String dir_path = path.get_base_dir();
-        Error error = DirAccess::make_dir_recursive_absolute(dir_path);
-        if (error != OK) {
-            return error;
-        }
-
-        String temp_path = path + String(".saving.tmp");
-        String backup_path = path + String(".saving.bak");
-        if (FileAccess::file_exists(temp_path)) {
-            DirAccess::remove_absolute(temp_path);
-        }
-        if (FileAccess::file_exists(backup_path)) {
-            DirAccess::remove_absolute(backup_path);
-        }
-
-        Ref<FileAccess> file = FileAccess::open(temp_path, FileAccess::WRITE);
-        if (file.is_null()) {
-            return FileAccess::get_open_error();
-        }
-
-        String json = JSON::stringify(chart, "");
-        if (!file->store_string(json)) {
-            file->close();
-            DirAccess::remove_absolute(temp_path);
-            return ERR_FILE_CANT_WRITE;
-        }
-        file->close();
-
-        bool had_original = FileAccess::file_exists(path);
-        if (had_original) {
-            error = DirAccess::rename_absolute(path, backup_path);
-            if (error != OK) {
-                DirAccess::remove_absolute(temp_path);
-                return error;
-            }
-        }
-
-        error = DirAccess::rename_absolute(temp_path, path);
-        if (error != OK) {
-            if (had_original) {
-                DirAccess::rename_absolute(backup_path, path);
-            }
-            DirAccess::remove_absolute(temp_path);
-            return error;
-        }
-
-        if (had_original) {
-            DirAccess::remove_absolute(backup_path);
-        }
-        return OK;
     }
 
     int LTETimelineServer::_find_single_in_point(const String& chart_path) {
@@ -468,59 +301,32 @@ namespace godot {
         return -1;
     }
 
-    String LTETimelineServer::_get_absolute_chart_path(const String& chart_path) const {
-        String normalized_path = chart_path.replace("\\", "/");
-        if (normalized_path.is_empty()) {
-            return String();
-        }
+    String LTETimelineServer::_get_project_path() const {
         LTEProjectManager* project_manager = LTEProjectManager::get_singleton();
-        String root_dir = project_manager ? project_manager->get_project_path().replace("\\", "/").simplify_path() : String();
-        if (normalized_path.begins_with("/") && !root_dir.is_empty()) {
-            return (root_dir + normalized_path).simplify_path();
-        }
-        if (Utils::is_absolute_path(normalized_path)) {
-            return normalized_path.simplify_path();
-        }
-        if (root_dir.is_empty()) {
-            return normalized_path.simplify_path();
-        }
-        return root_dir.path_join(normalized_path).simplify_path();
+        return project_manager ? project_manager->get_project_path().replace("\\", "/").simplify_path() : String();
     }
 
-    bool LTETimelineServer::_is_opened_chart_in_current_project(const Dictionary& opened_chart) const {
-        LTEProjectManager* project_manager = LTEProjectManager::get_singleton();
-        String root_dir = project_manager ? project_manager->get_project_path().replace("\\", "/").simplify_path() : String();
-        if (root_dir.is_empty()) {
-            return false;
-        }
+    String LTETimelineServer::_get_absolute_chart_path(const String& chart_path) const {
+        return Utils::resolve_project_path(chart_path, _get_project_path());
+    }
 
-        String opened_project_path = String(opened_chart.get("project_path", String())).replace("\\", "/").simplify_path();
-        if (!opened_project_path.is_empty()) {
-            return opened_project_path.to_lower() == root_dir.to_lower();
-        }
-
-        String opened_chart_path = _get_absolute_chart_path(opened_chart.get("path", String())).replace("\\", "/").simplify_path();
-        if (opened_chart_path.is_empty()) {
-            return false;
-        }
-        if (!root_dir.ends_with("/")) {
-            root_dir += "/";
-        }
-        return opened_chart_path.to_lower().begins_with(root_dir.to_lower());
+    Ref<ChartHelper> LTETimelineServer::_get_chart_helper_for_path(const String& chart_path) const {
+        Ref<ChartData> data = get_chart_data(chart_path);
+        return data.is_valid() ? data->create_helper() : ChartHelper::open(_get_absolute_chart_path(chart_path));
     }
 
     String LTETimelineServer::_resolve_chart_setting_key(const Dictionary& chart_dict, const String& chart_path) const {
         if (chart_dict.has(chart_path)) {
             return chart_path;
         }
-        String target_chart_path = _get_absolute_chart_path(chart_path);
+        String target_chart_path = chart_path_key(_get_absolute_chart_path(chart_path));
         if (target_chart_path.is_empty()) {
             return chart_path;
         }
         Array keys = chart_dict.keys();
         for (int32_t index = 0; index < keys.size(); ++index) {
             String key = keys[index];
-            if (_get_absolute_chart_path(key) == target_chart_path) {
+            if (chart_path_key(_get_absolute_chart_path(key)) == target_chart_path) {
                 return key;
             }
         }
@@ -580,6 +386,7 @@ namespace godot {
     void LTETimelineServer::clear_project_state() {
         flush_pending_chart_saves();
         opened_charts.clear();
+        chart_documents.clear();
         submitting_chart_change = false;
     }
 
@@ -604,7 +411,8 @@ namespace godot {
         config["chart_in_out_points"] = settings_config->timeline_panel_chart_in_out_points.get(in_out_point_key, Array());
         config["note_group_colors"] = settings_config->timeline_panel_note_group_colors.get(note_group_color_key, Dictionary());
         chart_list = settings_config->timeline_panel_chart_per_bar.get(uuid, Dictionary());
-        config["chart_per_bar"] = chart_list.get(chart_path, 4);
+        String per_bar_key = _resolve_chart_setting_key(chart_list, chart_path);
+        config["chart_per_bar"] = chart_list.get(per_bar_key, 4);
         chart_list = settings_config->timeline_panel_chart_playhead.get(uuid, Dictionary());
         config["chart_playhead"] = chart_list.get(chart_path, 0.0);
         chart_list = settings_config->timeline_panel_chart_scroll_position.get(uuid, Dictionary());
@@ -615,44 +423,39 @@ namespace godot {
     }
 
     void LTETimelineServer::open_chart(const String& uuid, const String& chart_path) {
-        Dictionary opened_chart = find_opened_chart_info(uuid, chart_path);
-        if (opened_chart.is_empty()) {
+        const OpenedChart* opened_chart = _find_opened_chart(uuid, chart_path);
+        if (!opened_chart) {
             opened_chart = _record_chart_data(uuid, chart_path);
         }
         else {
-            settings_config->timeline_panel_last_opened[uuid] = opened_chart.get("path", chart_path);
+            settings_config->timeline_panel_last_opened[uuid] = opened_chart->path;
         }
-        emit_signal("chart_opened", uuid, opened_chart);
+        emit_signal("chart_opened", uuid, opened_chart ? _make_chart_info(*opened_chart) : Dictionary());
         settings_config->save_settings_config(false);
     }
 
     Array LTETimelineServer::get_opened_chart_list() {
         Array current_project_charts;
-        for (int index = 0; index < opened_charts.size(); ++index) {
-            Dictionary opened_chart = opened_charts[index];
-            if (_is_opened_chart_in_current_project(opened_chart)) {
-                current_project_charts.append(opened_chart);
-            }
+        if (_get_project_path().is_empty()) {
+            return current_project_charts;
+        }
+        for (const OpenedChart& opened_chart : opened_charts) {
+            current_project_charts.append(_make_chart_info(opened_chart));
         }
         return current_project_charts;
     }
 
+    Ref<ChartData> LTETimelineServer::get_chart_data(const String& chart_path) const {
+        const ChartDocument* document = chart_documents.getptr(chart_path_key(_get_absolute_chart_path(chart_path)));
+        return document ? document->data : Ref<ChartData>();
+    }
+
     Ref<ChartHelper> LTETimelineServer::get_chart_helper(const String& uuid, const String& chart_path) {
-        Dictionary opened_chart = find_opened_chart_info(uuid, chart_path);
-        if (!opened_chart.is_empty()) {
-            Variant val = opened_chart.get("chart_helper", Variant());
-            Object* obj = val;
-            // 安全转换，如果类型不对或 obj 为空，cast_to 会返回 nullptr
-            ChartHelper* helper = Object::cast_to<ChartHelper>(obj);
-            if (helper) {
-                return Ref<ChartHelper>(helper);
-            }
+        const OpenedChart* opened_chart = _find_opened_chart(uuid, chart_path);
+        if (!opened_chart) {
+            opened_chart = _record_chart_data(uuid, chart_path);
         }
-        // 未找到则生成再次尝试获取
-        opened_chart = _record_chart_data(uuid, chart_path);
-        Variant val = opened_chart.get("chart_helper", Variant());
-        Object* obj = val;
-        return Object::cast_to<ChartHelper>(obj);
+        return opened_chart ? opened_chart->helper : Ref<ChartHelper>();
     }
 
     void LTETimelineServer::enable_playhead_auto_scroll(const String& uuid, const bool enable) {
@@ -830,8 +633,7 @@ namespace godot {
         Dictionary all_points_dict = settings_config->timeline_panel_chart_in_out_points;
         String point_key = _resolve_chart_setting_key(all_points_dict, chart_path);
         Array in_out_points = all_points_dict.get(point_key, Array());
-        String chart_abs_path = _get_absolute_chart_path(chart_path);
-        Ref<ChartHelper> helper = ChartHelper::open(chart_abs_path);
+        Ref<ChartHelper> helper = _get_chart_helper_for_path(chart_path);
         if (helper.is_null()) return;
         double duration = helper.is_valid() ? helper->get_duration() : 0.0;
         if (current_time < 0.0) current_time = 0.0;
@@ -935,8 +737,7 @@ namespace godot {
         Dictionary all_points_dict = settings_config->timeline_panel_chart_in_out_points;
         String point_key = _resolve_chart_setting_key(all_points_dict, chart_path);
         Array in_out_points = all_points_dict.get(point_key, Array());
-        String chart_abs_path = _get_absolute_chart_path(chart_path);
-        Ref<ChartHelper> helper = ChartHelper::open(chart_abs_path);
+        Ref<ChartHelper> helper = _get_chart_helper_for_path(chart_path);
         if (helper.is_null()) return;
         double duration = helper.is_valid() ? helper->get_duration() : 0.0;
         if (current_time < 0.0) current_time = 0.0;
@@ -1089,7 +890,8 @@ namespace godot {
         Ref<ChartHelper> helper = get_chart_helper(uuid, chart_path);
         if (helper.is_valid()) helper->set_per_bar(per_bar);
         Dictionary chart_list = settings_config->timeline_panel_chart_per_bar.get(uuid, Dictionary());
-        chart_list[chart_path] = per_bar;
+        String per_bar_key = _resolve_chart_setting_key(chart_list, chart_path);
+        chart_list[per_bar_key] = per_bar;
         settings_config->timeline_panel_chart_per_bar[uuid] = chart_list;
         settings_config->save_settings_config();
     }
@@ -1104,13 +906,16 @@ namespace godot {
     }
 
     String LTETimelineServer::get_chart_audio_abs_path(const String& chart_path) const {
-        LTEProjectManager* project_manager = LTEProjectManager::get_singleton();
-        String root_dir = project_manager ? project_manager->get_project_path() : String();
-        if (!chart_path.begins_with(root_dir)) return "";
-        Dictionary chart = Utils::load_json_file(chart_path);
-        Dictionary meta = chart.get("metadata", Dictionary());
-        String audio = meta.get("audio", "");
-        return root_dir + audio;
+        String root_dir = _get_project_path();
+        String absolute_path = _get_absolute_chart_path(chart_path);
+        if (root_dir.is_empty() || !Utils::is_path_in_project(absolute_path, root_dir)) {
+            return "";
+        }
+        Ref<ChartData> data = get_chart_data(chart_path);
+        if (data.is_null()) {
+            data = ChartData::from_dictionary(Utils::load_json_file(absolute_path));
+        }
+        return root_dir + data->get_audio_path();
     }
 
     double LTETimelineServer::get_time_from_playhead(const String& uuid, const String& chart_path) {
@@ -1127,38 +932,37 @@ namespace godot {
     }
 
     Dictionary LTETimelineServer::submit_chart_changes(const String& uuid, const String& chart_path, const Dictionary& new_chart) {
-        Dictionary opened_chart = find_opened_chart_info(uuid, chart_path);
-        if (opened_chart.is_empty()) return Dictionary();
+        const OpenedChart* opened_chart = _find_opened_chart(uuid, chart_path);
+        if (!opened_chart) return Dictionary();
 
         LTEUndoRedo* undo_redo = LTEUndoRedo::get_singleton();
         if (!undo_redo) return Dictionary();
 
-        Dictionary old_chart = opened_chart.get("chart", Dictionary());
-        old_chart = old_chart.duplicate(true);
+        Ref<ChartData> data = opened_chart->data;
+        String opened_path = opened_chart->path;
+        Dictionary old_chart = data->get_snapshot();
         Dictionary committed_chart = new_chart.duplicate(true);
         undo_redo->create_action("chart_changed");
-        Callable do_call = Callable(this, "_apply_chart_change").bind(opened_chart, committed_chart);
-        Callable undo_call = Callable(this, "_apply_chart_change").bind(opened_chart, old_chart);
-        undo_redo->add_do_method(do_call);
-        undo_redo->add_undo_method(undo_call);
+        Callable apply_snapshot = callable_mp(this, &LTETimelineServer::_apply_chart_snapshot);
+        undo_redo->add_do_method(apply_snapshot.bind(opened_path, data, committed_chart));
+        undo_redo->add_undo_method(apply_snapshot.bind(opened_path, data, old_chart));
+        bool was_submitting = submitting_chart_change;
         submitting_chart_change = true;
         undo_redo->commit_action();
-        submitting_chart_change = false;
+        submitting_chart_change = was_submitting;
 
-        opened_chart["saved"] = false;
         emit_signal("chart_changes_submitted", uuid, chart_path);
         if (_is_chart_auto_save_enabled()) {
-            _queue_chart_save(opened_chart, _get_auto_save_delay_msec());
-            return opened_chart;
+            _queue_chart_save(opened_path, data, _get_auto_save_delay_msec());
         }
-        return opened_chart;
+        return find_opened_chart_info(uuid, chart_path);
     }
 
     Dictionary LTETimelineServer::save_chart(const String& uuid, const String& chart_path) {
-        Dictionary opened_chart = find_opened_chart_info(uuid, chart_path);
-        if (opened_chart.is_empty()) return Dictionary();
-        _queue_chart_save(opened_chart);
-        return opened_chart;
+        const OpenedChart* opened_chart = _find_opened_chart(uuid, chart_path);
+        if (!opened_chart) return Dictionary();
+        _queue_chart_save(opened_chart->path, opened_chart->data);
+        return _make_chart_info(*opened_chart);
     }
 
     void LTETimelineServer::flush_pending_chart_saves() {
@@ -1169,28 +973,12 @@ namespace godot {
     }
 
     Dictionary LTETimelineServer::find_opened_chart_info(const String& uuid, const String& chart_path) const {
-        String target_chart_path = _get_absolute_chart_path(chart_path);
-        for (int i = 0; i < opened_charts.size(); ++i) {
-            Dictionary oc = opened_charts[i];
-            if (!_is_opened_chart_in_current_project(oc)) {
-                continue;
-            }
-            if (oc.get("uuid", "") != uuid) {
-                continue;
-            }
-            String opened_chart_path = oc.get("path", "");
-            if (opened_chart_path == chart_path) {
-                return oc;
-            }
-            if (!target_chart_path.is_empty() && _get_absolute_chart_path(opened_chart_path) == target_chart_path) {
-                return oc;
-            }
-        }
-        return Dictionary();
+        const OpenedChart* opened_chart = _find_opened_chart(uuid, chart_path);
+        return opened_chart ? _make_chart_info(*opened_chart) : Dictionary();
     }
 
     double LTETimelineServer::time_step_back(const String& chart_path, const double time) const {
-        Ref<ChartHelper> helper = ChartHelper::open(chart_path);
+        Ref<ChartHelper> helper = _get_chart_helper_for_path(chart_path);
         if (helper.is_null()) {
             ERR_PRINT("time_step_back: Failed to open chart path");
             return 0.0;
@@ -1205,7 +993,7 @@ namespace godot {
     }
 
     double LTETimelineServer::time_step_forward(const String& chart_path, const double time) const {
-        Ref<ChartHelper> helper = ChartHelper::open(chart_path);
+        Ref<ChartHelper> helper = _get_chart_helper_for_path(chart_path);
         if (helper.is_null()) {
             ERR_PRINT("time_step_back: Failed to open chart path");
             return time;

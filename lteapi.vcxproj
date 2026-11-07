@@ -139,6 +139,7 @@
     <ClInclude Include="src\editor\note_skin_editor_plugin.h" />
     <ClInclude Include="src\editor\note_skin_importer.h" />
     <ClInclude Include="src\server\backup_server.h" />
+    <ClInclude Include="src\util\chart_data.h" />
     <ClInclude Include="src\util\chart_helper.h" />
     <ClInclude Include="src\classes\base_random.h" />
     <ClInclude Include="src\classes\build_in_random.h" />
@@ -184,6 +185,7 @@
     <ClCompile Include="src\editor\note_skin_editor_plugin.cpp" />
     <ClCompile Include="src\editor\note_skin_importer.cpp" />
     <ClCompile Include="src\server\backup_server.cpp" />
+    <ClCompile Include="src\util\chart_data.cpp" />
     <ClCompile Include="src\util\chart_helper.cpp" />
     <ClCompile Include="src\classes\base_random.cpp" />
     <ClCompile Include="src\classes\build_in_random.cpp" />

@@ -153,6 +153,9 @@
     <ClInclude Include="src\resource\settings_config.h">
       <Filter>Header File\resource</Filter>
     </ClInclude>
+    <ClInclude Include="src\util\chart_data.h">
+      <Filter>Header File\utils</Filter>
+    </ClInclude>
     <ClInclude Include="src\util\chart_helper.h">
       <Filter>Header File\utils</Filter>
     </ClInclude>
@@ -301,6 +304,9 @@
     </ClCompile>
     <ClCompile Include="src\resource\settings_config.cpp">
       <Filter>Source File\resource</Filter>
+    </ClCompile>
+    <ClCompile Include="src\util\chart_data.cpp">
+      <Filter>Source File\utils</Filter>
     </ClCompile>
     <ClCompile Include="src\util\chart_helper.cpp">
       <Filter>Source File\utils</Filter>
