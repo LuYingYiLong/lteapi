@@ -39,6 +39,7 @@ namespace godot {
 		Dictionary fetch_graph_editor_config(const String& uuid) const;
 		void set_playhead_auto_scroll(const String& uuid, const bool enable);
 		void set_per_bar(const String& uuid, int per_bar);
+		void set_snap_mode(const String& uuid, bool enabled);
 		void set_split_ratio(const String& uuid, const double ratio);
 		void set_curve_view(const String& uuid, const String& curve_id, const Vector2& scroll_offset, const Vector2& content_scale);
 		void set_curve_tree_scroll(const String& uuid, const Vector2& scroll);

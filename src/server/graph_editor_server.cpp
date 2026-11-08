@@ -16,6 +16,7 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("fetch_graph_editor_config", "uuid"), &LTEGraphEditorServer::fetch_graph_editor_config);
 		ClassDB::bind_method(D_METHOD("set_playhead_auto_scroll", "uuid", "enable"), &LTEGraphEditorServer::set_playhead_auto_scroll);
 		ClassDB::bind_method(D_METHOD("set_per_bar", "uuid", "per_bar"), &LTEGraphEditorServer::set_per_bar);
+		ClassDB::bind_method(D_METHOD("set_snap_mode", "uuid", "enabled"), &LTEGraphEditorServer::set_snap_mode);
 		ClassDB::bind_method(D_METHOD("set_split_ratio", "uuid", "ratio"), &LTEGraphEditorServer::set_split_ratio);
 		ClassDB::bind_method(D_METHOD("set_curve_view", "uuid", "curve_id", "scroll_offset", "content_scale"), &LTEGraphEditorServer::set_curve_view);
 		ClassDB::bind_method(D_METHOD("set_curve_tree_scroll", "uuid", "scroll"), &LTEGraphEditorServer::set_curve_tree_scroll);
@@ -112,6 +113,7 @@ namespace godot {
 	}
 
 	Dictionary LTEGraphEditorServer::_make_empty_model(const String& uuid) const {
+		Dictionary config = fetch_graph_editor_config(uuid);
 		Dictionary model;
 		model["uuid"] = uuid;
 		model["source_uuid"] = String();
@@ -119,8 +121,8 @@ namespace godot {
 		model["has_chart"] = false;
 		model["duration"] = 0.0;
 		model["current_time"] = 0.0;
-		model["snap_mode"] = false;
-		model["per_bar"] = fetch_graph_editor_config(uuid)["per_bar"];
+		model["snap_mode"] = config["snap_mode"];
+		model["per_bar"] = config["per_bar"];
 		model["speeds"] = Array();
 		model["bpms"] = Array();
 		model["chart"] = Dictionary();
@@ -142,13 +144,11 @@ namespace godot {
 		LTETimelineServer* timeline_server = LTETimelineServer::get_singleton();
 		double duration = chart_data.is_valid() ? chart_data->get_duration() : double(metadata.get("duration", 0.0));
 		double current_time = 0.0;
-		bool snap_mode = false;
 		if (timeline_server) {
-			Dictionary config = timeline_server->fetch_timeline_config(source_uuid, chart_path);
 			current_time = timeline_server->get_time_from_playhead(source_uuid, chart_path);
-			snap_mode = config.get("snap_mode", false);
 		}
 
+		Dictionary config = fetch_graph_editor_config(uuid);
 		Dictionary model;
 		model["uuid"] = uuid;
 		model["source_uuid"] = source_uuid;
@@ -156,8 +156,8 @@ namespace godot {
 		model["has_chart"] = true;
 		model["duration"] = duration;
 		model["current_time"] = current_time;
-		model["snap_mode"] = snap_mode;
-		model["per_bar"] = fetch_graph_editor_config(uuid)["per_bar"];
+		model["snap_mode"] = config["snap_mode"];
+		model["per_bar"] = config["per_bar"];
 		model["speeds"] = _normalize_speeds(chart.get("speed", Array()));
 		model["bpms"] = chart_data.is_valid() ? chart_data->get_bpm_events() : Array(chart.get("bpm", Array()));
 		model["chart"] = chart.duplicate(true);
@@ -252,6 +252,7 @@ namespace godot {
 		config["playhead_auto_scroll"] = true;
 		config["per_bar"] = 4;
 		config["per_bars"] = LTESettingsConfig::get_default_timeline_panel_per_bars();
+		config["snap_mode"] = true;
 		config["split_ratio"] = 0.25;
 		config["curve_views"] = Dictionary();
 		if (uuid.is_empty()) {
@@ -266,6 +267,7 @@ namespace godot {
 		if (view_settings_value.get_type() == Variant::DICTIONARY) {
 			Dictionary view_settings = view_settings_value;
 			config["per_bar"] = std::max(1, int(view_settings.get("per_bar", config["per_bar"])));
+			config["snap_mode"] = view_settings.get("snap_mode", config["snap_mode"]);
 			config["split_ratio"] = view_settings.get("split_ratio", config["split_ratio"]);
 			config["curve_views"] = view_settings.get("curve_views", config["curve_views"]);
 			config["curve_tree_scroll"] = view_settings.get("curve_tree_scroll", Vector2(-1, -1));
@@ -296,6 +298,20 @@ namespace godot {
 			return;
 		}
 		view_settings["per_bar"] = per_bar;
+		settings_config->graph_editor_view_settings[uuid] = view_settings;
+		settings_config->save_settings_config(false);
+	}
+
+	void LTEGraphEditorServer::set_snap_mode(const String& uuid, bool enabled) {
+		LTESettingsConfig* settings_config = LTESettingsConfig::get_singleton();
+		if (uuid.is_empty() || !settings_config) {
+			return;
+		}
+		Dictionary view_settings = settings_config->graph_editor_view_settings.get(uuid, Dictionary());
+		if (bool(view_settings.get("snap_mode", true)) == enabled) {
+			return;
+		}
+		view_settings["snap_mode"] = enabled;
 		settings_config->graph_editor_view_settings[uuid] = view_settings;
 		settings_config->save_settings_config(false);
 	}
