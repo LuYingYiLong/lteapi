@@ -2,29 +2,29 @@
 #define LIGHTECH_ZIP_READER_H
 
 #include <godot_cpp/classes/ref_counted.hpp>
-#include <godot_cpp/classes/zip_reader.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_int64_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
-
-#include <mutex>
 
 namespace godot {
 	class LightechZipReader : public RefCounted {
 		GDCLASS(LightechZipReader, RefCounted)
 
 	private:
-		Ref<ZIPReader> reader;
-		mutable std::mutex reader_mutex;
 		String archive_path;
+		PackedInt64Array archive_stamp;
+		Dictionary entry_index;
 		Dictionary project_info;
 		PackedStringArray entries;
 		Dictionary entry_names;
+		PackedByteArray _read_indexed_file(const String& name) const;
 
 	protected:
 		static void _bind_methods();
 
 	public:
 		static bool is_archive(const String& path);
+		static PackedInt64Array get_archive_stamp(const String& path);
 		static Ref<LightechZipReader> open(const String& path);
 		static PackedByteArray read_entry(const String& archive_path, const String& entry);
 		static bool is_package_path(const String& path);

@@ -3,11 +3,16 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/classes/zip_reader.hpp>
 #include <godot_cpp/templates/hash_set.hpp>
+
+#include <filesystem>
+#include <limits>
 
 namespace godot {
 	namespace {
 		constexpr char PACKAGE_PREFIX[] = "ltz://";
+		constexpr uint32_t ZIP64_FIELD = std::numeric_limits<uint32_t>::max();
 
 		String path_key(const String& path) {
 #ifdef _WIN32
@@ -41,10 +46,156 @@ namespace godot {
 			}
 			return true;
 		}
+
+		PackedByteArray read_file_range(const Ref<FileAccess>& file, int64_t offset, int64_t length) {
+			file->seek(offset);
+			return file->get_buffer(length);
+		}
+
+		template <typename Read>
+		Dictionary index_zip(int64_t size, const Read& read) {
+			const int64_t tail_offset = size > 65557 ? size - 65557 : 0;
+			PackedByteArray tail = read(tail_offset, size - tail_offset);
+			int64_t end = tail.size() - 22;
+			for (; end >= 0; --end) {
+				if (tail.decode_u32(end) == 0x06054b50 && end + 22 + tail.decode_u16(end + 20) == tail.size()) {
+					break;
+				}
+			}
+			if (end < 0 || tail.decode_u16(end + 4) != 0 || tail.decode_u16(end + 6) != 0 ||
+					tail.decode_u16(end + 8) != tail.decode_u16(end + 10)) {
+				return {};
+			}
+			uint64_t offset = tail.decode_u32(end + 16);
+			uint64_t length = tail.decode_u32(end + 12);
+			uint64_t count = tail.decode_u16(end + 10);
+			uint64_t directory_limit = tail_offset + end;
+			if (offset == ZIP64_FIELD || length == ZIP64_FIELD || count == 0xffff) {
+				if (directory_limit < 20) {
+					return {};
+				}
+				PackedByteArray locator = read(directory_limit - 20, 20);
+				if (locator.size() == 20 && locator.decode_u32(0) == 0x07064b50) {
+					uint64_t zip64_offset = locator.decode_u64(8);
+					if (locator.decode_u32(4) != 0 || locator.decode_u32(16) != 1 ||
+							directory_limit < 76 || zip64_offset > directory_limit - 76) {
+						return {};
+					}
+					PackedByteArray zip64 = read(zip64_offset, 56);
+					if (zip64.size() != 56 || zip64.decode_u32(0) != 0x06064b50 ||
+							zip64.decode_u32(16) != 0 || zip64.decode_u32(20) != 0 ||
+							zip64.decode_u64(24) != zip64.decode_u64(32)) {
+						return {};
+					}
+					count = zip64.decode_u64(32);
+					length = zip64.decode_u64(40);
+					offset = zip64.decode_u64(48);
+					directory_limit = zip64_offset;
+				}
+			}
+			if (offset > directory_limit || length > directory_limit - offset || count > length / 46) {
+				return {};
+			}
+			PackedByteArray directory = read(offset, length);
+			if (directory.size() != int64_t(length)) {
+				return {};
+			}
+			Dictionary index;
+			int64_t position = 0;
+			for (uint64_t i = 0; i < count; ++i) {
+				if (position + 46 > directory.size() || directory.decode_u32(position) != 0x02014b50) {
+					return {};
+				}
+				const int64_t name_end = position + 46 + directory.decode_u16(position + 28);
+				const int64_t extra_end = name_end + directory.decode_u16(position + 30);
+				const int64_t next = extra_end + directory.decode_u16(position + 32);
+				if (next > directory.size() || directory.decode_u16(position + 34) != 0) {
+					return {};
+				}
+				String name = directory.slice(position + 46, name_end).get_string_from_utf8();
+				if (index.has(name)) {
+					return {};
+				}
+				uint64_t uncompressed = directory.decode_u32(position + 24);
+				uint64_t compressed = directory.decode_u32(position + 20);
+				uint64_t local = directory.decode_u32(position + 42);
+				if (uncompressed == ZIP64_FIELD || compressed == ZIP64_FIELD || local == ZIP64_FIELD) {
+					int64_t extra = name_end;
+					for (; extra + 4 <= extra_end && directory.decode_u16(extra) != 1; ) {
+						extra += 4 + directory.decode_u16(extra + 2);
+					}
+					if (extra + 4 > extra_end) {
+						return {};
+					}
+					int64_t field = extra + 4;
+					const int64_t field_end = field + directory.decode_u16(extra + 2);
+					if (field_end > extra_end) {
+						return {};
+					}
+					for (uint64_t* value : { &uncompressed, &compressed, &local }) {
+						if (*value == ZIP64_FIELD) {
+							if (field + 8 > field_end) {
+								return {};
+							}
+							*value = directory.decode_u64(field);
+							field += 8;
+						}
+					}
+				}
+				if (local > offset || compressed > offset - local || uncompressed > INT64_MAX) {
+					return {};
+				}
+				PackedInt64Array entry;
+				for (int64_t value : { int64_t(local), int64_t(compressed), int64_t(uncompressed),
+							int64_t(directory.decode_u32(position + 16)), int64_t(directory.decode_u16(position + 10)),
+							int64_t(directory.decode_u16(position + 8)) }) {
+					entry.append(value);
+				}
+				index[name] = entry;
+				position = next;
+			}
+			return index;
+		}
+
+		template <typename Read>
+		PackedByteArray read_zip_entry(const PackedInt64Array& entry, int64_t archive_size, int64_t size_limit, const Read& read) {
+			if (entry.size() != 6 || (entry[5] & 1) != 0) {
+				return {};
+			}
+			const int64_t local = entry[0];
+			const int64_t compressed_size = entry[1];
+			const int64_t size = entry[2];
+			const int64_t method = entry[4];
+			if (local > archive_size - 30 || size <= 0 || size > size_limit ||
+					(method != 8 && (method != 0 || compressed_size != size))) {
+				return {};
+			}
+			PackedByteArray header = read(local, 30);
+			if (header.size() != 30 || header.decode_u32(0) != 0x04034b50) {
+				return {};
+			}
+			const int64_t start = local + 30 + header.decode_u16(26) + header.decode_u16(28);
+			if (start > archive_size || compressed_size > archive_size - start) {
+				return {};
+			}
+			PackedByteArray data = read(start, compressed_size);
+			if (data.size() != compressed_size || method == 0) {
+				return data.size() == compressed_size ? data : PackedByteArray();
+			}
+			// Wrap ZIP's raw DEFLATE stream with the checksum and size required by GZIP.
+			PackedByteArray gzip = String("1f8b08000000000000ff").hex_decode();
+			gzip.append_array(data);
+			const int64_t trailer = gzip.size();
+			gzip.resize(trailer + 8);
+			gzip.encode_u32(trailer, entry[3]);
+			gzip.encode_u32(trailer + 4, size);
+			return gzip.decompress(size, FileAccess::COMPRESSION_GZIP);
+		}
 	}
 
 	void LightechZipReader::_bind_methods() {
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("is_archive", "path"), &LightechZipReader::is_archive);
+		ClassDB::bind_static_method("LightechZipReader", D_METHOD("get_archive_stamp", "path"), &LightechZipReader::get_archive_stamp);
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("open", "path"), &LightechZipReader::open);
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("read_entry", "archive_path", "entry"), &LightechZipReader::read_entry);
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("is_package_path", "path"), &LightechZipReader::is_package_path);
@@ -63,22 +214,50 @@ namespace godot {
 		return extension == "ltz" || extension == "zip";
 	}
 
+	PackedInt64Array LightechZipReader::get_archive_stamp(const String& path) {
+		String absolute = ProjectSettings::get_singleton()->globalize_path(path);
+#ifdef _WIN32
+		std::filesystem::path source(absolute.utf16().get_data());
+#else
+		std::filesystem::path source(absolute.utf8().get_data());
+#endif
+		std::error_code error;
+		const auto modified = std::filesystem::last_write_time(source, error);
+		if (error) {
+			return {};
+		}
+		const auto size = std::filesystem::file_size(source, error);
+		if (error || size > INT64_MAX) {
+			return {};
+		}
+		PackedInt64Array stamp;
+		stamp.append(modified.time_since_epoch().count());
+		stamp.append(size);
+		return stamp;
+	}
+
 	Ref<LightechZipReader> LightechZipReader::open(const String& path) {
 		String archive_path = ProjectSettings::get_singleton()->globalize_path(path).replace("\\", "/").simplify_path();
-		if (!is_archive(archive_path) || !FileAccess::file_exists(archive_path)) {
+		if (!is_archive(archive_path)) {
 			return nullptr;
 		}
-		Ref<ZIPReader> reader;
-		reader.instantiate();
-		if (reader->open(archive_path) != OK) {
+		PackedInt64Array stamp = get_archive_stamp(archive_path);
+		if (stamp.is_empty()) {
 			return nullptr;
 		}
+		Ref<FileAccess> file = FileAccess::open(archive_path, FileAccess::READ);
+		if (file.is_null() || file->get_length() != uint64_t(stamp[1])) {
+			return nullptr;
+		}
+		const auto read = [&file](int64_t offset, int64_t length) { return read_file_range(file, offset, length); };
 		Ref<LightechZipReader> package;
 		package.instantiate();
-		package->reader = reader;
 		package->archive_path = archive_path;
+		package->archive_stamp = stamp;
+		package->entry_index = index_zip(stamp[1], read);
 		HashSet<String> seen;
-		for (const String& name : reader->get_files()) {
+		for (const Variant& name_value : package->entry_index.keys()) {
+			String name = name_value;
 			String normalized = name.replace("\\", "/");
 			String entry = normalized.trim_suffix("/");
 			String key = path_key(entry);
@@ -103,7 +282,11 @@ namespace godot {
 				continue;
 			}
 			String name = package->entry_names[path_key(entry)];
-			Variant parsed = JSON::parse_string(reader->read_file(name, true).get_string_from_utf8());
+			PackedByteArray bytes = read_zip_entry(package->entry_index[name], stamp[1], ZIP64_FIELD, read);
+			if (bytes.is_empty()) {
+				continue;
+			}
+			Variant parsed = JSON::parse_string(bytes.get_string_from_utf8());
 			if (parsed.get_type() == Variant::DICTIONARY && !Dictionary(parsed).is_empty()) {
 				candidates[entry.get_base_dir()] = parsed;
 			}
@@ -124,7 +307,7 @@ namespace godot {
 				package->project_info[root] = candidates[root];
 			}
 		}
-		return package->project_info.is_empty() ? Ref<LightechZipReader>() : package;
+		return package->project_info.is_empty() || get_archive_stamp(archive_path) != stamp ? Ref<LightechZipReader>() : package;
 	}
 
 	PackedByteArray LightechZipReader::read_entry(const String& archive_path, const String& entry) {
@@ -207,87 +390,41 @@ namespace godot {
 		if (entry.is_empty()) {
 			return {};
 		}
-		std::lock_guard<std::mutex> lock(reader_mutex);
-		return reader->read_file(entry, true);
+		return _read_indexed_file(entry);
+	}
+
+	PackedByteArray LightechZipReader::_read_indexed_file(const String& name) const {
+		if (get_archive_stamp(archive_path) != archive_stamp) {
+			return {};
+		}
+		Ref<FileAccess> file = FileAccess::open(archive_path, FileAccess::READ);
+		if (file.is_null() || file->get_length() != uint64_t(archive_stamp[1])) {
+			return {};
+		}
+		const auto read = [&file](int64_t offset, int64_t length) { return read_file_range(file, offset, length); };
+		PackedByteArray data = read_zip_entry(entry_index.get(name, PackedInt64Array()), archive_stamp[1], ZIP64_FIELD, read);
+		return get_archive_stamp(archive_path) == archive_stamp ? data : PackedByteArray();
 	}
 
 	Dictionary LightechZipReader::index_memory_zip(const PackedByteArray& bytes) {
-		const int64_t size = bytes.size();
-		const int64_t min_end = size > 65557 ? size - 65557 : 0;
-		int64_t end = size - 22;
-		for (; end >= min_end; --end) {
-			if (bytes.decode_u32(end) == 0x06054b50 && end + 22 + bytes.decode_u16(end + 20) == size) {
-				break;
-			}
-		}
-		if (end < min_end || bytes.decode_u16(end + 4) != 0 || bytes.decode_u16(end + 6) != 0 ||
-				bytes.decode_u16(end + 8) != bytes.decode_u16(end + 10)) {
-			return {};
-		}
-		int64_t offset = bytes.decode_u32(end + 16);
-		const int64_t directory_end = offset + bytes.decode_u32(end + 12);
-		const int count = bytes.decode_u16(end + 10);
-		if (directory_end > end) {
-			return {};
-		}
+		const auto read = [&bytes](int64_t offset, int64_t length) { return bytes.slice(offset, offset + length); };
 		Dictionary index;
-		for (int i = 0; i < count; ++i) {
-			if (offset + 46 > directory_end || bytes.decode_u32(offset) != 0x02014b50) {
-				return {};
-			}
-			const int64_t name_end = offset + 46 + bytes.decode_u16(offset + 28);
-			const int64_t next = name_end + bytes.decode_u16(offset + 30) + bytes.decode_u16(offset + 32);
-			if (next > directory_end) {
-				return {};
-			}
-			String name = bytes.slice(offset + 46, name_end).get_string_from_utf8().replace("\\", "/");
-			if (!is_relative_path(name.trim_suffix("/"))) {
+		Dictionary raw_index = index_zip(bytes.size(), read);
+		for (const Variant& key : raw_index.keys()) {
+			String name = String(key).replace("\\", "/");
+			if (!is_relative_path(name.trim_suffix("/")) || index.has(name)) {
 				return {};
 			}
 			if (!name.ends_with("/")) {
-				if (index.has(name)) {
-					return {};
-				}
-				index[name] = offset;
+				index[name] = raw_index[key];
 			}
-			offset = next;
 		}
 		return index;
 	}
 
 	PackedByteArray LightechZipReader::read_memory_zip_entry(const PackedByteArray& bytes, const Dictionary& index, const String& name) {
-		int64_t entry = index.get(name, -1);
-		if (entry < 0 || entry + 46 > bytes.size() || (bytes.decode_u16(entry + 8) & 1) != 0) {
-			return {};
-		}
-		const int64_t local = bytes.decode_u32(entry + 42);
-		const int64_t compressed_size = bytes.decode_u32(entry + 20);
-		const int64_t size = bytes.decode_u32(entry + 24);
-		if (local + 30 > bytes.size() || bytes.decode_u32(local) != 0x04034b50 || size <= 0 || size > (256LL << 20)) {
-			return {};
-		}
-		const int64_t start = local + 30 + bytes.decode_u16(local + 26) + bytes.decode_u16(local + 28);
-		if (start + compressed_size > bytes.size()) {
-			return {};
-		}
-		const int method = bytes.decode_u16(entry + 10);
-		if (method == 0 && compressed_size == size) {
-			return bytes.slice(start, start + size);
-		}
-		if (method != 8) {
-			return {};
-		}
-		// Wrap ZIP's raw DEFLATE stream with the checksum and size required by GZIP.
-		PackedByteArray gzip;
-		for (uint8_t byte : { 0x1f, 0x8b, 0x08, 0, 0, 0, 0, 0, 0, 0xff }) {
-			gzip.append(byte);
-		}
-		gzip.append_array(bytes.slice(start, start + compressed_size));
-		const int64_t trailer = gzip.size();
-		gzip.resize(trailer + 8);
-		gzip.encode_u32(trailer, bytes.decode_u32(entry + 16));
-		gzip.encode_u32(trailer + 4, size);
-		return gzip.decompress(size, FileAccess::COMPRESSION_GZIP);
+		const auto read = [&bytes](int64_t offset, int64_t length) { return bytes.slice(offset, offset + length); };
+		return read_zip_entry(index.get(name, PackedInt64Array()), bytes.size(), 256LL << 20, read);
 	}
 
 	PackedStringArray LightechZipReader::get_project_roots() const {
@@ -318,8 +455,7 @@ namespace godot {
 		if (entry.is_empty()) {
 			return {};
 		}
-		std::lock_guard<std::mutex> lock(reader_mutex);
-		return reader->read_file(entry, true);
+		return _read_indexed_file(entry);
 	}
 
 }
