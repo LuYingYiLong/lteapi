@@ -28,12 +28,14 @@ namespace godot {
 		mutable bool timing_dirty = true;
 
 		void _ensure_timing() const;
+		static Ref<ChartData> _from_loaded_snapshot(const Dictionary& snapshot, bool validate_for_play);
 
 	protected:
 		static void _bind_methods();
 
 	public:
 		static Ref<ChartData> open(const String& path, bool validate_for_play = true);
+		static Ref<ChartData> from_json(const String& json, bool validate_for_play = true);
 		static Ref<ChartData> from_dictionary(const Dictionary& snapshot);
 		static Ref<ChartData> from_timing(const Array& bpms, double duration);
 		Dictionary get_snapshot() const;

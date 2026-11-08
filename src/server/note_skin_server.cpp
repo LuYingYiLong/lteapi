@@ -23,6 +23,7 @@ namespace godot {
 	static const char* DEFAULT_SKIN_PATH = "res://datas/vanilla_skin.lteskin";
 
 	void LTENoteSkinServer::_bind_methods() {
+		ClassDB::bind_method(D_METHOD("set_package_skin_source", "project_path", "package"), &LTENoteSkinServer::set_package_skin_source);
 		ClassDB::bind_method(D_METHOD("normalize_skin_path", "skin_path"), &LTENoteSkinServer::normalize_skin_path);
 		ClassDB::bind_method(D_METHOD("get_default_skin_path"), &LTENoteSkinServer::get_default_skin_path);
 		ClassDB::bind_method(D_METHOD("set_default_skin_path", "skin_path"), &LTENoteSkinServer::set_default_skin_path);
@@ -84,6 +85,9 @@ namespace godot {
 	}
 
 	String LTENoteSkinServer::normalize_skin_path(const String& skin_path) const {
+		if (LightechZipReader::is_package_path(skin_path)) {
+			return skin_path;
+		}
 		String normalized_path = skin_path.replace("\\", "/").strip_edges().simplify_path();
 		if (normalized_path.is_empty()) {
 			return String();
@@ -277,6 +281,22 @@ namespace godot {
 
 	Dictionary LTENoteSkinServer::load_skin_manifest(const String& skin_path) const {
 		String normalized_path = normalize_skin_path(skin_path);
+		if (LightechZipReader::is_package_path(normalized_path)) {
+			Dictionary skin = _get_package_skin(normalized_path);
+			PackedByteArray bytes = skin.get("bytes", PackedByteArray());
+			Dictionary index = skin.get("index", Dictionary());
+			PackedByteArray manifest_bytes = index.is_empty() ? bytes : LightechZipReader::read_memory_zip_entry(bytes, index, "manifest.json");
+			if (manifest_bytes.is_empty()) {
+				return {};
+			}
+			Variant parsed = JSON::parse_string(manifest_bytes.get_string_from_utf8());
+			if (parsed.get_type() != Variant::DICTIONARY) {
+				return {};
+			}
+			Dictionary manifest = _normalize_manifest(parsed);
+			manifest["path"] = normalized_path;
+			return manifest;
+		}
 		String reader_path = _get_skin_archive_reader_path(normalized_path);
 		if (reader_path.is_empty()) {
 			return Dictionary();
@@ -319,6 +339,11 @@ namespace godot {
 
 	PackedByteArray LTENoteSkinServer::read_skin_file(const String& skin_path, const String& file_path) const {
 		String normalized_path = normalize_skin_path(skin_path);
+		if (LightechZipReader::is_package_path(normalized_path)) {
+			Dictionary skin = _get_package_skin(normalized_path);
+			return LightechZipReader::read_memory_zip_entry(skin.get("bytes", PackedByteArray()), skin.get("index", Dictionary()),
+					file_path.replace("\\", "/").strip_edges().simplify_path());
+		}
 		String reader_path = _get_skin_archive_reader_path(normalized_path);
 		String normalized_file_path = file_path.replace("\\", "/").strip_edges().simplify_path();
 		if (reader_path.is_empty() || normalized_file_path.is_empty() || !_is_safe_zip_path(normalized_file_path)) {
@@ -1496,6 +1521,13 @@ namespace godot {
 	}
 
 	PackedStringArray LTENoteSkinServer::_read_zip_file_list(const String& skin_path) const {
+		if (LightechZipReader::is_package_path(skin_path)) {
+			Dictionary skin = _get_package_skin(skin_path);
+			Dictionary index = skin.get("index", Dictionary());
+			PackedStringArray files(index.keys());
+			files.sort();
+			return files;
+		}
 		String reader_path = _get_skin_archive_reader_path(skin_path);
 		if (reader_path.is_empty()) {
 			return PackedStringArray();
@@ -1510,6 +1542,38 @@ namespace godot {
 		reader->close();
 		files.sort();
 		return files;
+	}
+
+	void LTENoteSkinServer::set_package_skin_source(const String& project_path, const Ref<LightechZipReader>& package) {
+		String session = project_path.get_slice("#", 1);
+		if (!LightechZipReader::is_package_path(project_path) || session.is_empty()) {
+			return;
+		}
+		if (package.is_valid()) {
+			package_skin_sources[session] = package;
+			return;
+		}
+		package_skin_sources.erase(session);
+		for (const Variant& key : package_skins.keys()) {
+			if (String(key).get_slice("#", 1) == session) {
+				package_skins.erase(key);
+			}
+		}
+	}
+
+	Dictionary LTENoteSkinServer::_get_package_skin(const String& path) const {
+		Ref<LightechZipReader> package = package_skin_sources.get(path.get_slice("#", 1), Variant());
+		if (package.is_valid() && package_skins.has(path)) {
+			return package_skins[path];
+		}
+		PackedByteArray bytes = package.is_valid() ? package->read_resource(path) : LightechZipReader::read_asset(path);
+		Dictionary skin;
+		skin["bytes"] = bytes;
+		skin["index"] = LightechZipReader::index_memory_zip(bytes);
+		if (package.is_valid()) {
+			package_skins[path] = skin;
+		}
+		return skin;
 	}
 
 	String LTENoteSkinServer::_make_unique_zip_path(const String& preferred_path, const PackedStringArray& existing_files) const {

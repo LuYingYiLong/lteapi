@@ -1,6 +1,8 @@
 #ifndef NOTE_SKIN_SERVER_H
 #define NOTE_SKIN_SERVER_H
 
+#include "lightech_zip_reader.h"
+
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -18,7 +20,10 @@ namespace godot {
 		static LTENoteSkinServer* singleton;
 
 		Dictionary skin_revisions;
+		Dictionary package_skin_sources;
+		mutable Dictionary package_skins;
 
+		Dictionary _get_package_skin(const String& path) const;
 		Dictionary _normalize_manifest(const Dictionary& manifest) const;
 		Array _normalize_targets(const Variant& value) const;
 		Dictionary _normalize_textures(const Variant& value) const;
@@ -68,6 +73,7 @@ namespace godot {
 		static LTENoteSkinServer* get_singleton();
 
 		void clear_project_state();
+		void set_package_skin_source(const String& project_path, const Ref<LightechZipReader>& package);
 		String normalize_skin_path(const String& skin_path) const;
 		String get_default_skin_path() const;
 		void set_default_skin_path(const String& skin_path) const;

@@ -87,7 +87,7 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("open_composition", "uuid", "scene_path"), &LTECompositionServer::open_composition);
 		ClassDB::bind_method(D_METHOD("get_opened_composition_list"), &LTECompositionServer::get_opened_composition_list);
 		ClassDB::bind_method(D_METHOD("find_opened_composition_info", "uuid", "scene_path"), &LTECompositionServer::find_opened_composition_info);
-		ClassDB::bind_method(D_METHOD("get_composition", "scene_path"), &LTECompositionServer::get_composition);
+		ClassDB::bind_method(D_METHOD("get_composition", "scene_path", "package"), &LTECompositionServer::get_composition, DEFVAL(Ref<LightechZipReader>()));
 		ClassDB::bind_method(D_METHOD("get_composition_layers", "scene_path"), &LTECompositionServer::get_composition_layers);
 		ClassDB::bind_method(D_METHOD("set_composition_layers", "scene_path", "layers"), &LTECompositionServer::set_composition_layers);
 		ClassDB::bind_method(D_METHOD("submit_composition_changes", "uuid", "scene_path", "new_composition"), &LTECompositionServer::submit_composition_changes);
@@ -96,7 +96,8 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("apply_composition_keyframe_deltas", "uuid", "scene_path", "deltas", "use_after"), &LTECompositionServer::apply_composition_keyframe_deltas, DEFVAL(true));
 		ClassDB::bind_method(D_METHOD("save_composition", "uuid", "scene_path"), &LTECompositionServer::save_composition);
 		ClassDB::bind_method(D_METHOD("evaluate_composition", "scene_path", "time", "project_root"), &LTECompositionServer::evaluate_composition, DEFVAL(String()));
-		ClassDB::bind_method(D_METHOD("evaluate_composition_runtime", "scene_path", "time", "project_root"), &LTECompositionServer::evaluate_composition_runtime, DEFVAL(String()));
+		ClassDB::bind_method(D_METHOD("evaluate_composition_runtime", "scene_path", "time", "project_root", "package"), &LTECompositionServer::evaluate_composition_runtime, DEFVAL(String()), DEFVAL(Ref<LightechZipReader>()));
+		ClassDB::bind_method(D_METHOD("clear_package_runtime", "project_root"), &LTECompositionServer::clear_package_runtime);
 		ClassDB::bind_method(D_METHOD("normalize_composition", "value"), &LTECompositionServer::normalize_composition);
 		ClassDB::bind_method(D_METHOD("compute_interpolation_weight", "interpolation", "keyframe_data", "weight"), &LTECompositionServer::compute_interpolation_weight);
 		ClassDB::bind_method(D_METHOD("get_last_opened_composition", "uuid"), &LTECompositionServer::get_last_opened_composition);
@@ -175,6 +176,12 @@ namespace godot {
 	}
 
 	String LTECompositionServer::_get_absolute_scene_path(const String& scene_path, const String& project_root) const {
+		if (LightechZipReader::is_package_path(project_root)) {
+			return LightechZipReader::resolve_asset(project_root, scene_path);
+		}
+		if (LightechZipReader::is_package_path(scene_path)) {
+			return scene_path;
+		}
 		String normalized_path = scene_path.replace("\\", "/");
 		if (normalized_path.is_empty()) {
 			return String();
@@ -221,7 +228,11 @@ namespace godot {
 		return opened_scene_path.to_lower().begins_with(root_path.to_lower());
 	}
 
-	Variant LTECompositionServer::_load_composition_variant(const String& scene_path) const {
+	Variant LTECompositionServer::_load_composition_variant(const String& scene_path, const Ref<LightechZipReader>& package) const {
+		if (LightechZipReader::is_package_path(scene_path)) {
+			PackedByteArray bytes = package.is_valid() ? package->read_resource(scene_path) : LightechZipReader::read_asset(scene_path);
+			return bytes.is_empty() ? Variant() : JSON::parse_string(bytes.get_string_from_utf8());
+		}
 		if (scene_path.is_empty() || !FileAccess::file_exists(scene_path)) {
 			return Variant();
 		}
@@ -285,20 +296,20 @@ namespace godot {
 		return opened_composition;
 	}
 
-	Dictionary LTECompositionServer::_load_composition(const String& scene_path) const {
-		if (scene_path.is_empty() || !FileAccess::file_exists(scene_path)) {
-			return _make_default_composition(scene_path.get_extension().to_lower() == "seq" ? String("sequence") : String("scene"));
+	Dictionary LTECompositionServer::_load_composition(const String& scene_path, const Ref<LightechZipReader>& package) const {
+		Variant parsed = _load_composition_variant(scene_path, package);
+		if (parsed.get_type() == Variant::NIL) {
+			return _make_default_composition(scene_path.get_slice("#", 0).get_extension().to_lower() == "seq" ? String("sequence") : String("scene"));
 		}
-		Variant parsed = _load_composition_variant(scene_path);
 		return _normalize_composition_data(parsed);
 	}
 
-	Dictionary LTECompositionServer::_get_composition_for_evaluation(const String& scene_path, const String& project_root) const {
+	Dictionary LTECompositionServer::_get_composition_for_evaluation(const String& scene_path, const String& project_root, const Ref<LightechZipReader>& package) const {
 		String absolute_scene_path = _get_absolute_scene_path(scene_path, project_root);
 		if (absolute_scene_path.is_empty()) {
 			return Dictionary();
 		}
-		int index = _find_first_opened_composition_index(absolute_scene_path, project_root);
+		int index = LightechZipReader::is_package_path(absolute_scene_path) ? -1 : _find_first_opened_composition_index(absolute_scene_path, project_root);
 		if (index >= 0) {
 			Dictionary opened_composition = opened_compositions[index];
 			Dictionary composition = opened_composition.get("composition", Dictionary());
@@ -308,7 +319,7 @@ namespace godot {
 			Dictionary composition = evaluation_composition_cache[absolute_scene_path];
 			return composition;
 		}
-		Dictionary composition = _load_composition(absolute_scene_path);
+		Dictionary composition = _load_composition(absolute_scene_path, package);
 		evaluation_composition_cache[absolute_scene_path] = composition;
 		return composition;
 	}
@@ -2066,12 +2077,15 @@ namespace godot {
 		return opened_composition.duplicate(true);
 	}
 
-	Dictionary LTECompositionServer::get_composition(const String& scene_path) const {
+	Dictionary LTECompositionServer::get_composition(const String& scene_path, const Ref<LightechZipReader>& package) const {
 		int index = _find_first_opened_composition_index(scene_path);
 		if (index >= 0) {
 			Dictionary opened_composition = opened_compositions[index];
 			Dictionary composition = opened_composition.get("composition", Dictionary());
 			return composition.duplicate(true);
+		}
+		if (LightechZipReader::is_package_path(scene_path)) {
+			return _get_composition_for_evaluation(scene_path, String(), package);
 		}
 		return _load_composition(_get_absolute_scene_path(scene_path));
 	}
@@ -2791,7 +2805,7 @@ namespace godot {
 		return plan;
 	}
 
-	Dictionary LTECompositionServer::_get_runtime_evaluation_plan(const String& scene_path, const String& project_root) const {
+	Dictionary LTECompositionServer::_get_runtime_evaluation_plan(const String& scene_path, const String& project_root, const Ref<LightechZipReader>& package) const {
 		String absolute_scene_path = _get_absolute_scene_path(scene_path, project_root);
 		if (absolute_scene_path.is_empty()) {
 			return Dictionary();
@@ -2799,23 +2813,23 @@ namespace godot {
 		if (runtime_evaluation_plan_cache.has(absolute_scene_path)) {
 			return runtime_evaluation_plan_cache[absolute_scene_path];
 		}
-		Dictionary composition = _get_composition_for_evaluation(absolute_scene_path, project_root);
+		Dictionary composition = _get_composition_for_evaluation(absolute_scene_path, project_root, package);
 		Dictionary plan = _compile_runtime_evaluation_plan(composition);
 		runtime_evaluation_plan_cache[absolute_scene_path] = plan;
 		return plan;
 	}
 
-	Array LTECompositionServer::_evaluate_composition_runtime_internal(const String& scene_path, const double time, Array visited_paths, const String& project_root) const {
+	Array LTECompositionServer::_evaluate_composition_runtime_internal(const String& scene_path, const double time, Array visited_paths, const String& project_root, const Ref<LightechZipReader>& package) const {
 		String absolute_scene_path = _get_absolute_scene_path(scene_path, project_root);
 		if (absolute_scene_path.is_empty() || visited_paths.has(absolute_scene_path)) {
 			return Array();
 		}
 		visited_paths.append(absolute_scene_path);
-		Dictionary plan = _get_runtime_evaluation_plan(absolute_scene_path, project_root);
-		return _evaluate_composition_runtime_plan_internal(plan, absolute_scene_path, time, visited_paths, project_root);
+		Dictionary plan = _get_runtime_evaluation_plan(absolute_scene_path, project_root, package);
+		return _evaluate_composition_runtime_plan_internal(plan, absolute_scene_path, time, visited_paths, project_root, package);
 	}
 
-	Array LTECompositionServer::_evaluate_composition_runtime_plan_internal(const Dictionary& plan, const String& owner_path, const double time, Array visited_paths, const String& project_root) const {
+	Array LTECompositionServer::_evaluate_composition_runtime_plan_internal(const Dictionary& plan, const String& owner_path, const double time, Array visited_paths, const String& project_root, const Ref<LightechZipReader>& package) const {
 		if (!owner_path.is_empty() && !visited_paths.has(owner_path)) {
 			visited_paths.append(owner_path);
 		}
@@ -2839,13 +2853,13 @@ namespace godot {
 			state = state.duplicate(true);
 			states.append(state);
 			if (String(state.get("type", String())) == "sequence") {
-				_append_runtime_sequence_child_states(states, state, layer_plan, time, visited_paths, project_root);
+				_append_runtime_sequence_child_states(states, state, layer_plan, time, visited_paths, project_root, package);
 			}
 		}
 		return states;
 	}
 
-	void LTECompositionServer::_append_runtime_sequence_child_states(Array& states, const Dictionary& state, const Dictionary& layer_plan, const double time, Array visited_paths, const String& project_root) const {
+	void LTECompositionServer::_append_runtime_sequence_child_states(Array& states, const Dictionary& state, const Dictionary& layer_plan, const double time, Array visited_paths, const String& project_root, const Ref<LightechZipReader>& package) const {
 		if (!bool(state.get("visible", true))) {
 			return;
 		}
@@ -2871,11 +2885,11 @@ namespace godot {
 			Array child_visited_paths = visited_paths.duplicate(false);
 			Array child_states;
 			if (!sequence_path.is_empty()) {
-				child_states = _evaluate_composition_runtime_internal(sequence_path, local_time, child_visited_paths, project_root);
+				child_states = _evaluate_composition_runtime_internal(sequence_path, local_time, child_visited_paths, project_root, package);
 			}
 			else {
 				Dictionary embedded_plan = layer_plan.get("embedded_plan", Dictionary());
-				child_states = _evaluate_composition_runtime_plan_internal(embedded_plan, "embedded:" + sequence_id + ":" + clip_id, local_time, child_visited_paths, project_root);
+				child_states = _evaluate_composition_runtime_plan_internal(embedded_plan, "embedded:" + sequence_id + ":" + clip_id, local_time, child_visited_paths, project_root, package);
 			}
 			for (int index = 0; index < child_states.size(); ++index) {
 				if (child_states[index].get_type() != Variant::DICTIONARY) {
@@ -3017,8 +3031,23 @@ namespace godot {
 		return _evaluate_composition_internal(scene_path, time, Array(), project_root);
 	}
 
-	Array LTECompositionServer::evaluate_composition_runtime(const String& scene_path, const double time, const String& project_root) const {
-		return _evaluate_composition_runtime_internal(scene_path, time, Array(), project_root);
+	void LTECompositionServer::clear_package_runtime(const String& project_root) {
+		String session = project_root.get_slice("#", 1);
+		if (!LightechZipReader::is_package_path(project_root) || session.is_empty()) {
+			return;
+		}
+		for (Dictionary* cache : { &runtime_evaluation_plan_cache, &evaluation_composition_cache }) {
+			for (const Variant& key : cache->keys()) {
+				String path = key;
+				if (LightechZipReader::is_package_path(path) && path.get_slice("#", 1) == session) {
+					cache->erase(key);
+				}
+			}
+		}
+	}
+
+	Array LTECompositionServer::evaluate_composition_runtime(const String& scene_path, const double time, const String& project_root, const Ref<LightechZipReader>& package) const {
+		return _evaluate_composition_runtime_internal(scene_path, time, Array(), project_root, package);
 	}
 
 	Dictionary LTECompositionServer::normalize_composition(const Variant& value) const {

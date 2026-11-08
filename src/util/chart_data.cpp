@@ -2,6 +2,8 @@
 
 #include "utils.h"
 
+#include <godot_cpp/classes/json.hpp>
+
 #include <algorithm>
 #include <initializer_list>
 
@@ -90,6 +92,7 @@ namespace godot {
 
 	void ChartData::_bind_methods() {
 		ClassDB::bind_static_method("ChartData", D_METHOD("open", "path", "validate_for_play"), &ChartData::open, DEFVAL(true));
+		ClassDB::bind_static_method("ChartData", D_METHOD("from_json", "json", "validate_for_play"), &ChartData::from_json, DEFVAL(true));
 		ClassDB::bind_static_method("ChartData", D_METHOD("from_dictionary", "snapshot"), &ChartData::from_dictionary);
 		ClassDB::bind_static_method("ChartData", D_METHOD("from_timing", "bpms", "duration"), &ChartData::from_timing);
 		ClassDB::bind_method(D_METHOD("get_snapshot"), &ChartData::get_snapshot);
@@ -115,7 +118,10 @@ namespace godot {
 		if (path.is_empty()) {
 			return nullptr;
 		}
-		Dictionary snapshot = Utils::load_json_file(path, false);
+		return _from_loaded_snapshot(Utils::load_json_file(path, false), validate_for_play);
+	}
+
+	Ref<ChartData> ChartData::_from_loaded_snapshot(const Dictionary& snapshot, bool validate_for_play) {
 		if (snapshot.is_empty() || (validate_for_play && !is_playable_chart(snapshot))) {
 			return nullptr;
 		}
@@ -130,6 +136,19 @@ namespace godot {
 		data.instantiate();
 		data->chart = snapshot.duplicate(true);
 		return data;
+	}
+
+	Ref<ChartData> ChartData::from_json(const String& json, bool validate_for_play) {
+		Ref<JSON> parser;
+		parser.instantiate();
+		if (parser->parse(json) != OK) {
+			return nullptr;
+		}
+		Variant parsed = parser->get_data();
+		if (parsed.get_type() != Variant::DICTIONARY) {
+			return nullptr;
+		}
+		return _from_loaded_snapshot(parsed, validate_for_play);
 	}
 
 	Ref<ChartData> ChartData::from_timing(const Array& bpms, double duration) {

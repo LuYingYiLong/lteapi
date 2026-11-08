@@ -1,6 +1,8 @@
 #ifndef COMPOSITION_SERVER_H
 #define COMPOSITION_SERVER_H
 
+#include "lightech_zip_reader.h"
+
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -27,12 +29,12 @@ namespace godot {
 
 		String _get_absolute_scene_path(const String& scene_path, const String& project_root = String()) const;
 		bool _is_opened_composition_in_current_project(const Dictionary& opened_composition, const String& project_root = String()) const;
-		Variant _load_composition_variant(const String& scene_path) const;
+		Variant _load_composition_variant(const String& scene_path, const Ref<LightechZipReader>& package = {}) const;
 		int _find_opened_composition_index(const String& uuid, const String& scene_path) const;
 		int _find_first_opened_composition_index(const String& scene_path, const String& project_root = String()) const;
 		Dictionary _record_composition_data(const String& uuid, const String& scene_path);
-		Dictionary _load_composition(const String& scene_path) const;
-		Dictionary _get_composition_for_evaluation(const String& scene_path, const String& project_root) const;
+		Dictionary _load_composition(const String& scene_path, const Ref<LightechZipReader>& package = {}) const;
+		Dictionary _get_composition_for_evaluation(const String& scene_path, const String& project_root, const Ref<LightechZipReader>& package = {}) const;
 		Error _save_composition(const String& scene_path, const Dictionary& composition) const;
 		void _queue_composition_save(const String& scene_path, const Dictionary& composition, const int64_t revision);
 		int32_t _get_auto_save_delay_msec() const;
@@ -97,11 +99,11 @@ namespace godot {
 		Array _evaluate_composition_data_internal(const Dictionary& composition, const String& owner_path, const double time, Array visited_paths, const String& project_root) const;
 		void _append_sequence_child_states(Array& states, const Dictionary& state, const double time, Array visited_paths, const String& project_root) const;
 		Dictionary _compile_runtime_evaluation_plan(const Dictionary& composition) const;
-		Dictionary _get_runtime_evaluation_plan(const String& scene_path, const String& project_root) const;
+		Dictionary _get_runtime_evaluation_plan(const String& scene_path, const String& project_root, const Ref<LightechZipReader>& package) const;
 		Dictionary _make_compact_runtime_state(const Dictionary& layer) const;
-		Array _evaluate_composition_runtime_internal(const String& scene_path, const double time, Array visited_paths, const String& project_root) const;
-		Array _evaluate_composition_runtime_plan_internal(const Dictionary& plan, const String& owner_path, const double time, Array visited_paths, const String& project_root) const;
-		void _append_runtime_sequence_child_states(Array& states, const Dictionary& state, const Dictionary& layer_plan, const double time, Array visited_paths, const String& project_root) const;
+		Array _evaluate_composition_runtime_internal(const String& scene_path, const double time, Array visited_paths, const String& project_root, const Ref<LightechZipReader>& package) const;
+		Array _evaluate_composition_runtime_plan_internal(const Dictionary& plan, const String& owner_path, const double time, Array visited_paths, const String& project_root, const Ref<LightechZipReader>& package) const;
+		void _append_runtime_sequence_child_states(Array& states, const Dictionary& state, const Dictionary& layer_plan, const double time, Array visited_paths, const String& project_root, const Ref<LightechZipReader>& package) const;
 		void _invalidate_runtime_evaluation_plan(const String& scene_path);
 		void _apply_sequence_parent_state(Dictionary& child_state, const Dictionary& parent_state) const;
 		Dictionary _submit_composition_changes_internal(const String& uuid, const String& scene_path, const Dictionary& new_composition, const bool normalize);
@@ -125,7 +127,7 @@ namespace godot {
 		void open_composition(const String& uuid, const String& scene_path);
 		Array get_opened_composition_list() const;
 		Dictionary find_opened_composition_info(const String& uuid, const String& scene_path) const;
-		Dictionary get_composition(const String& scene_path) const;
+		Dictionary get_composition(const String& scene_path, const Ref<LightechZipReader>& package = {}) const;
 		Array get_composition_layers(const String& scene_path) const;
 		Dictionary set_composition_layers(const String& scene_path, const Array& layers);
 		Dictionary submit_composition_changes(const String& uuid, const String& scene_path, const Dictionary& new_composition);
@@ -134,7 +136,8 @@ namespace godot {
 		Dictionary apply_composition_keyframe_deltas(const String& uuid, const String& scene_path, const Array& deltas, const bool use_after = true);
 		Dictionary save_composition(const String& uuid, const String& scene_path);
 		Array evaluate_composition(const String& scene_path, const double time, const String& project_root = String()) const;
-		Array evaluate_composition_runtime(const String& scene_path, const double time, const String& project_root = String()) const;
+		Array evaluate_composition_runtime(const String& scene_path, const double time, const String& project_root = String(), const Ref<LightechZipReader>& package = {}) const;
+		void clear_package_runtime(const String& project_root);
 		Dictionary normalize_composition(const Variant& value) const;
 		double compute_interpolation_weight(const String& interpolation, const Dictionary& keyframe_data, const double weight) const;
 		String get_last_opened_composition(const String& uuid) const;

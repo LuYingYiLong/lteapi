@@ -1,36 +1,13 @@
 #include "lightech_zip_reader.h"
 
-#include "utils.h"
-
-#include <godot_cpp/classes/config_file.hpp>
-#include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/json.hpp>
-#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
-#include <godot_cpp/classes/zip_reader.hpp>
 #include <godot_cpp/templates/hash_set.hpp>
-
-#include <mutex>
 
 namespace godot {
 	namespace {
-		constexpr char CACHE_ROOT[] = "user://cache/chart_packages";
-		constexpr char MANIFEST_NAME[] = "package.cfg";
-		constexpr int CACHE_VERSION = 1;
-
-		std::mutex package_cache_mutex;
-
-		Error rename_cache_directory(const String& from, const String& to) {
-			Error error = DirAccess::rename_absolute(from, to);
-#ifdef _WIN32
-			for (int attempt = 0; attempt < 3 && (error == FAILED || error == ERR_BUSY || error == ERR_FILE_NO_PERMISSION); ++attempt) {
-				OS::get_singleton()->delay_msec(25 * (attempt + 1));
-				error = DirAccess::rename_absolute(from, to);
-			}
-#endif
-			return error;
-		}
+		constexpr char PACKAGE_PREFIX[] = "ltz://";
 
 		String path_key(const String& path) {
 #ifdef _WIN32
@@ -64,139 +41,21 @@ namespace godot {
 			}
 			return true;
 		}
-
-		// Only remove staging and backup directories under the package cache.
-		bool remove_cache_directory(const String& cache_root, const String& path) {
-			if (!path.begins_with(cache_root + String("/"))) {
-				return false;
-			}
-			Ref<DirAccess> parent = DirAccess::open(path.get_base_dir());
-			if (parent.is_null()) {
-				return false;
-			}
-			if (parent->is_link(path.get_file())) {
-				return parent->remove(path.get_file()) == OK;
-			}
-			if (!DirAccess::dir_exists_absolute(path)) {
-				return !FileAccess::file_exists(path);
-			}
-			Ref<DirAccess> directory = DirAccess::open(path);
-			if (directory.is_null()) {
-				return false;
-			}
-			directory->set_include_hidden(true);
-			for (const String& child : directory->get_directories()) {
-				if (!remove_cache_directory(cache_root, path.path_join(child))) {
-					return false;
-				}
-			}
-			for (const String& child : directory->get_files()) {
-				if (directory->remove(child) != OK) {
-					return false;
-				}
-			}
-			return parent->remove(path.get_file()) == OK;
-		}
-
-		bool load_index(const Ref<ConfigFile>& manifest, const String& content_path, Dictionary& info, PackedStringArray& entries) {
-			if (int(manifest->get_value("package", "version", 0)) != CACHE_VERSION) {
-				return false;
-			}
-			Variant stored_info = manifest->get_value("package", "info", Variant());
-			Variant stored_entries = manifest->get_value("package", "entries", Variant());
-			if (stored_info.get_type() != Variant::DICTIONARY || stored_entries.get_type() != Variant::PACKED_STRING_ARRAY) {
-				return false;
-			}
-			Dictionary candidate = stored_info;
-			for (const Variant& key : candidate.keys()) {
-				String root = key;
-				if ((!root.is_empty() && !is_relative_path(root)) || candidate[key].get_type() != Variant::DICTIONARY ||
-						!FileAccess::file_exists(content_path.path_join(root).path_join("info.json"))) {
-					return false;
-				}
-			}
-			info = candidate;
-			entries = stored_entries;
-			return !info.is_empty();
-		}
-
-		bool extract_package(const String& archive_path, const String& destination, Dictionary& info, PackedStringArray& entries) {
-			Ref<ZIPReader> reader;
-			reader.instantiate();
-			if (reader->open(archive_path) != OK) {
-				return false;
-			}
-			PackedStringArray names = reader->get_files();
-			PackedStringArray paths;
-			HashSet<String> seen;
-			for (const String& name : names) {
-				String path = name.replace("\\", "/");
-				String key = path_key(path.trim_suffix("/"));
-				if (!is_relative_path(path.trim_suffix("/")) || seen.has(key)) {
-					return false;
-				}
-				seen.insert(key);
-				paths.append(path);
-			}
-
-			Dictionary candidates;
-			for (int64_t index = 0; index < paths.size(); ++index) {
-				const String& path = paths[index];
-				String target = destination.path_join(path);
-				String directory = path.ends_with("/") ? target : target.get_base_dir();
-				if (DirAccess::make_dir_recursive_absolute(directory) != OK) {
-					return false;
-				}
-				if (path.ends_with("/")) {
-					continue;
-				}
-				Ref<FileAccess> output = FileAccess::open(target, FileAccess::WRITE);
-				if (output.is_null()) {
-					return false;
-				}
-				PackedByteArray bytes = reader->read_file(names[index]);
-				if (!output->store_buffer(bytes)) {
-					return false;
-				}
-				output->close();
-				entries.append(path);
-				if (path.get_file() == "info.json") {
-					Variant parsed = JSON::parse_string(bytes.get_string_from_utf8());
-					if (parsed.get_type() == Variant::DICTIONARY && !Dictionary(parsed).is_empty()) {
-						candidates[path.get_base_dir()] = parsed;
-					}
-				}
-			}
-			if (reader->close() != OK) {
-				return false;
-			}
-
-			PackedStringArray roots(candidates.keys());
-			roots.sort();
-			for (const String& root : roots) {
-				bool nested = false;
-				for (const Variant& parent_key : info.keys()) {
-					String parent = parent_key;
-					if (parent.is_empty() || path_key(root).begins_with(path_key(parent) + "/")) {
-						nested = true;
-						break;
-					}
-				}
-				if (!nested) {
-					info[root] = candidates[root];
-				}
-			}
-			return !info.is_empty();
-		}
 	}
 
 	void LightechZipReader::_bind_methods() {
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("is_archive", "path"), &LightechZipReader::is_archive);
-		ClassDB::bind_static_method("LightechZipReader", D_METHOD("open", "path", "verify_content"), &LightechZipReader::open, DEFVAL(false));
+		ClassDB::bind_static_method("LightechZipReader", D_METHOD("open", "path"), &LightechZipReader::open);
+		ClassDB::bind_static_method("LightechZipReader", D_METHOD("read_entry", "archive_path", "entry"), &LightechZipReader::read_entry);
+		ClassDB::bind_static_method("LightechZipReader", D_METHOD("is_package_path", "path"), &LightechZipReader::is_package_path);
+		ClassDB::bind_static_method("LightechZipReader", D_METHOD("resolve_asset", "project_path", "path"), &LightechZipReader::resolve_asset);
+		ClassDB::bind_static_method("LightechZipReader", D_METHOD("read_asset", "path"), &LightechZipReader::read_asset);
+		ClassDB::bind_method(D_METHOD("read_resource", "path"), &LightechZipReader::read_resource);
 		ClassDB::bind_method(D_METHOD("get_project_roots"), &LightechZipReader::get_project_roots);
 		ClassDB::bind_method(D_METHOD("get_info", "project_root"), &LightechZipReader::get_info);
-		ClassDB::bind_method(D_METHOD("get_root_path", "project_root"), &LightechZipReader::get_root_path);
 		ClassDB::bind_method(D_METHOD("get_entries"), &LightechZipReader::get_entries);
+		ClassDB::bind_method(D_METHOD("get_entry_name", "project_root", "relative_path"), &LightechZipReader::get_entry_name);
+		ClassDB::bind_method(D_METHOD("read_project_file", "project_root", "relative_path"), &LightechZipReader::read_project_file);
 	}
 
 	bool LightechZipReader::is_archive(const String& path) {
@@ -204,83 +63,231 @@ namespace godot {
 		return extension == "ltz" || extension == "zip";
 	}
 
-	Ref<LightechZipReader> LightechZipReader::open(const String& path, bool verify_content) {
-		ProjectSettings* settings = ProjectSettings::get_singleton();
-		String archive_path = settings->globalize_path(path).replace("\\", "/").simplify_path();
+	Ref<LightechZipReader> LightechZipReader::open(const String& path) {
+		String archive_path = ProjectSettings::get_singleton()->globalize_path(path).replace("\\", "/").simplify_path();
 		if (!is_archive(archive_path) || !FileAccess::file_exists(archive_path)) {
 			return nullptr;
 		}
-		std::lock_guard<std::mutex> lock(package_cache_mutex);
-		int64_t size = FileAccess::get_size(archive_path);
-		uint64_t modified = FileAccess::get_modified_time(archive_path);
-		String cache_root = settings->globalize_path(CACHE_ROOT).replace("\\", "/").simplify_path();
-		String cache_dir = cache_root.path_join(path_key(archive_path).sha256_text());
-		String manifest_path = cache_dir.path_join(MANIFEST_NAME);
-		Ref<ConfigFile> manifest;
-		manifest.instantiate();
+		Ref<ZIPReader> reader;
+		reader.instantiate();
+		if (reader->open(archive_path) != OK) {
+			return nullptr;
+		}
 		Ref<LightechZipReader> package;
 		package.instantiate();
-		package->content_path = cache_dir.path_join("content");
-
-		bool indexed = manifest->load(manifest_path) == OK && load_index(manifest, package->content_path, package->project_info, package->entries);
-		bool same_stamp = indexed && size >= 0 && modified != 0 &&
-				size == int64_t(manifest->get_value("package", "size", -1)) &&
-				modified == uint64_t(manifest->get_value("package", "modified", 0));
-		if (same_stamp && !verify_content) {
-			return package;
-		}
-		String digest = FileAccess::get_sha256(archive_path);
-		if (digest.is_empty() || size != FileAccess::get_size(archive_path) || modified != FileAccess::get_modified_time(archive_path)) {
-			return nullptr;
-		}
-		manifest->set_value("package", "size", size);
-		manifest->set_value("package", "modified", modified);
-		if (indexed && String(manifest->get_value("package", "digest", "")) == digest) {
-			if (!same_stamp) {
-				manifest->save(manifest_path);
+		package->reader = reader;
+		package->archive_path = archive_path;
+		HashSet<String> seen;
+		for (const String& name : reader->get_files()) {
+			String normalized = name.replace("\\", "/");
+			String entry = normalized.trim_suffix("/");
+			String key = path_key(entry);
+			if (!is_relative_path(entry) || seen.has(key)) {
+				return nullptr;
 			}
-			return package;
+			seen.insert(key);
+			if (!normalized.ends_with("/")) {
+				package->entries.append(entry);
+				package->entry_names[key] = name;
+			}
 		}
 
-		String suffix = Utils::uuid(Utils::UUID_V7);
-		String pending = cache_root.path_join(".pending-" + suffix);
-		String previous = cache_root.path_join(".previous-" + suffix);
-		package->project_info.clear();
-		package->entries.clear();
-		if (!extract_package(archive_path, pending.path_join("content"), package->project_info, package->entries)) {
-			if (DirAccess::dir_exists_absolute(pending)) {
-				remove_cache_directory(cache_root, pending);
+		Dictionary candidates;
+		for (const String& entry : package->entries) {
+			for (String parent = entry.get_base_dir(); !parent.is_empty(); parent = parent.get_base_dir()) {
+				if (package->entry_names.has(path_key(parent))) {
+					return nullptr;
+				}
 			}
-			WARN_PRINT(vformat("Invalid or unreadable chart package: %s", archive_path));
-			return nullptr;
-		}
-		manifest->set_value("package", "version", CACHE_VERSION);
-		manifest->set_value("package", "digest", digest);
-		manifest->set_value("package", "info", package->project_info);
-		manifest->set_value("package", "entries", package->entries);
-		if (manifest->save(pending.path_join(MANIFEST_NAME)) != OK ||
-				size != FileAccess::get_size(archive_path) || modified != FileAccess::get_modified_time(archive_path)) {
-			remove_cache_directory(cache_root, pending);
-			return nullptr;
-		}
-		bool had_cache = DirAccess::dir_exists_absolute(cache_dir);
-		if (had_cache && rename_cache_directory(cache_dir, previous) != OK) {
-			remove_cache_directory(cache_root, pending);
-			WARN_PRINT(vformat("Cannot move the existing chart package cache: %s", cache_dir));
-			return nullptr;
-		}
-		if (rename_cache_directory(pending, cache_dir) != OK) {
-			if (had_cache) {
-				rename_cache_directory(previous, cache_dir);
+			if (entry.get_file() != "info.json") {
+				continue;
 			}
-			remove_cache_directory(cache_root, pending);
-			WARN_PRINT(vformat("Cannot publish the chart package cache: %s", cache_dir));
-			return nullptr;
+			String name = package->entry_names[path_key(entry)];
+			Variant parsed = JSON::parse_string(reader->read_file(name, true).get_string_from_utf8());
+			if (parsed.get_type() == Variant::DICTIONARY && !Dictionary(parsed).is_empty()) {
+				candidates[entry.get_base_dir()] = parsed;
+			}
 		}
-		if (had_cache) {
-			remove_cache_directory(cache_root, previous);
+
+		PackedStringArray roots(candidates.keys());
+		roots.sort();
+		for (const String& root : roots) {
+			bool nested = false;
+			for (const Variant& parent_key : package->project_info.keys()) {
+				String parent = parent_key;
+				if (parent.is_empty() || path_key(root).begins_with(path_key(parent) + "/")) {
+					nested = true;
+					break;
+				}
+			}
+			if (!nested) {
+				package->project_info[root] = candidates[root];
+			}
 		}
-		return package;
+		return package->project_info.is_empty() ? Ref<LightechZipReader>() : package;
+	}
+
+	PackedByteArray LightechZipReader::read_entry(const String& archive_path, const String& entry) {
+		if (!is_archive(archive_path) || !is_relative_path(entry.replace("\\", "/"))) {
+			return {};
+		}
+		Ref<ZIPReader> reader;
+		reader.instantiate();
+		if (reader->open(archive_path) != OK) {
+			return {};
+		}
+		if (reader->file_exists(entry, true)) {
+			return reader->read_file(entry, true);
+		}
+		String key = path_key(entry.replace("\\", "/"));
+		for (const String& name : reader->get_files()) {
+			if (path_key(name.replace("\\", "/")) == key) {
+				return reader->read_file(name, true);
+			}
+		}
+		return {};
+	}
+
+	bool LightechZipReader::is_package_path(const String& path) {
+		return path.begins_with(PACKAGE_PREFIX);
+	}
+
+	String LightechZipReader::resolve_asset(const String& project_path, const String& path) {
+		String normalized = path.replace("\\", "/").strip_edges();
+		if (normalized.begins_with("res://") || normalized.begins_with("uid://")) {
+			return normalized;
+		}
+		PackedStringArray root = project_path.get_slice("#", 0).trim_prefix(PACKAGE_PREFIX).split("/", true, 1);
+		if (!is_package_path(project_path) || root.size() != 2 || root[0].is_empty()) {
+			return {};
+		}
+		String project_root = root[1].uri_decode();
+		String entry;
+		if (is_package_path(normalized)) {
+			PackedStringArray target = normalized.get_slice("#", 0).trim_prefix(PACKAGE_PREFIX).split("/", true, 1);
+			if (target.size() != 2 || path_key(target[0].uri_decode()) != path_key(root[0].uri_decode())) {
+				return {};
+			}
+			entry = target[1].uri_decode().replace("\\", "/").simplify_path();
+			if (!project_root.is_empty() && !path_key(entry).begins_with(path_key(project_root + String("/")))) {
+				return {};
+			}
+		} else {
+			String relative = normalized.trim_prefix("/").simplify_path();
+			if (!is_relative_path(relative)) {
+				return {};
+			}
+			entry = project_root.path_join(relative);
+		}
+		if (!is_relative_path(entry)) {
+			return {};
+		}
+		String identifier = String(PACKAGE_PREFIX) + root[0] + String("/") + path_key(entry).uri_encode();
+		String revision = project_path.get_slice("#", 1);
+		return revision.is_empty() ? identifier : identifier + String("#") + revision;
+	}
+
+	PackedByteArray LightechZipReader::read_asset(const String& path) {
+		if (!is_package_path(path)) {
+			return FileAccess::file_exists(path) ? FileAccess::get_file_as_bytes(path) : PackedByteArray();
+		}
+		PackedStringArray reference = path.get_slice("#", 0).trim_prefix(PACKAGE_PREFIX).split("/", true, 1);
+		return reference.size() == 2 ? read_entry(reference[0].uri_decode(), reference[1].uri_decode()) : PackedByteArray();
+	}
+
+	PackedByteArray LightechZipReader::read_resource(const String& path) const {
+		if (!is_package_path(path)) {
+			return read_asset(path);
+		}
+		PackedStringArray reference = path.get_slice("#", 0).trim_prefix(PACKAGE_PREFIX).split("/", true, 1);
+		if (reference.size() != 2 || path_key(reference[0].uri_decode()) != path_key(archive_path)) {
+			return {};
+		}
+		String entry = entry_names.get(path_key(reference[1].uri_decode().replace("\\", "/")), String());
+		if (entry.is_empty()) {
+			return {};
+		}
+		std::lock_guard<std::mutex> lock(reader_mutex);
+		return reader->read_file(entry, true);
+	}
+
+	Dictionary LightechZipReader::index_memory_zip(const PackedByteArray& bytes) {
+		const int64_t size = bytes.size();
+		const int64_t min_end = size > 65557 ? size - 65557 : 0;
+		int64_t end = size - 22;
+		for (; end >= min_end; --end) {
+			if (bytes.decode_u32(end) == 0x06054b50 && end + 22 + bytes.decode_u16(end + 20) == size) {
+				break;
+			}
+		}
+		if (end < min_end || bytes.decode_u16(end + 4) != 0 || bytes.decode_u16(end + 6) != 0 ||
+				bytes.decode_u16(end + 8) != bytes.decode_u16(end + 10)) {
+			return {};
+		}
+		int64_t offset = bytes.decode_u32(end + 16);
+		const int64_t directory_end = offset + bytes.decode_u32(end + 12);
+		const int count = bytes.decode_u16(end + 10);
+		if (directory_end > end) {
+			return {};
+		}
+		Dictionary index;
+		for (int i = 0; i < count; ++i) {
+			if (offset + 46 > directory_end || bytes.decode_u32(offset) != 0x02014b50) {
+				return {};
+			}
+			const int64_t name_end = offset + 46 + bytes.decode_u16(offset + 28);
+			const int64_t next = name_end + bytes.decode_u16(offset + 30) + bytes.decode_u16(offset + 32);
+			if (next > directory_end) {
+				return {};
+			}
+			String name = bytes.slice(offset + 46, name_end).get_string_from_utf8().replace("\\", "/");
+			if (!is_relative_path(name.trim_suffix("/"))) {
+				return {};
+			}
+			if (!name.ends_with("/")) {
+				if (index.has(name)) {
+					return {};
+				}
+				index[name] = offset;
+			}
+			offset = next;
+		}
+		return index;
+	}
+
+	PackedByteArray LightechZipReader::read_memory_zip_entry(const PackedByteArray& bytes, const Dictionary& index, const String& name) {
+		int64_t entry = index.get(name, -1);
+		if (entry < 0 || entry + 46 > bytes.size() || (bytes.decode_u16(entry + 8) & 1) != 0) {
+			return {};
+		}
+		const int64_t local = bytes.decode_u32(entry + 42);
+		const int64_t compressed_size = bytes.decode_u32(entry + 20);
+		const int64_t size = bytes.decode_u32(entry + 24);
+		if (local + 30 > bytes.size() || bytes.decode_u32(local) != 0x04034b50 || size <= 0 || size > (256LL << 20)) {
+			return {};
+		}
+		const int64_t start = local + 30 + bytes.decode_u16(local + 26) + bytes.decode_u16(local + 28);
+		if (start + compressed_size > bytes.size()) {
+			return {};
+		}
+		const int method = bytes.decode_u16(entry + 10);
+		if (method == 0 && compressed_size == size) {
+			return bytes.slice(start, start + size);
+		}
+		if (method != 8) {
+			return {};
+		}
+		// Wrap ZIP's raw DEFLATE stream with the checksum and size required by GZIP.
+		PackedByteArray gzip;
+		for (uint8_t byte : { 0x1f, 0x8b, 0x08, 0, 0, 0, 0, 0, 0, 0xff }) {
+			gzip.append(byte);
+		}
+		gzip.append_array(bytes.slice(start, start + compressed_size));
+		const int64_t trailer = gzip.size();
+		gzip.resize(trailer + 8);
+		gzip.encode_u32(trailer, bytes.decode_u32(entry + 16));
+		gzip.encode_u32(trailer + 4, size);
+		return gzip.decompress(size, FileAccess::COMPRESSION_GZIP);
 	}
 
 	PackedStringArray LightechZipReader::get_project_roots() const {
@@ -294,11 +301,25 @@ namespace godot {
 		return info.duplicate(true);
 	}
 
-	String LightechZipReader::get_root_path(const String& project_root) const {
-		return project_info.has(project_root) ? content_path.path_join(project_root).simplify_path() : String();
-	}
-
 	PackedStringArray LightechZipReader::get_entries() const {
 		return entries;
 	}
+
+	String LightechZipReader::get_entry_name(const String& project_root, const String& relative_path) const {
+		String relative = relative_path.replace("\\", "/").strip_edges().trim_prefix("/").simplify_path();
+		if (!project_info.has(project_root) || !is_relative_path(relative)) {
+			return {};
+		}
+		return entry_names.get(path_key(project_root.path_join(relative)), String());
+	}
+
+	PackedByteArray LightechZipReader::read_project_file(const String& project_root, const String& relative_path) const {
+		String entry = get_entry_name(project_root, relative_path);
+		if (entry.is_empty()) {
+			return {};
+		}
+		std::lock_guard<std::mutex> lock(reader_mutex);
+		return reader->read_file(entry, true);
+	}
+
 }
