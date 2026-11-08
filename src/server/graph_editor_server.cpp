@@ -113,19 +113,12 @@ namespace godot {
 	}
 
 	Dictionary LTEGraphEditorServer::_make_empty_model(const String& uuid) const {
-		Dictionary config = fetch_graph_editor_config(uuid);
 		Dictionary model;
 		model["uuid"] = uuid;
 		model["source_uuid"] = String();
 		model["chart_path"] = String();
 		model["has_chart"] = false;
-		model["duration"] = 0.0;
 		model["current_time"] = 0.0;
-		model["snap_mode"] = config["snap_mode"];
-		model["per_bar"] = config["per_bar"];
-		model["speeds"] = Array();
-		model["bpms"] = Array();
-		model["chart"] = Dictionary();
 		model["chart_data"] = Variant();
 		return model;
 	}
@@ -135,32 +128,22 @@ namespace godot {
 			return _make_empty_model(uuid);
 		}
 
-		Dictionary chart = opened_chart.get("chart", Dictionary());
-		Dictionary metadata = chart.get("metadata", Dictionary());
 		String chart_path = opened_chart.get("path", String());
 		String source_uuid = opened_chart.get("uuid", String());
 
 		Ref<ChartData> chart_data = opened_chart.get("chart_data", Variant());
 		LTETimelineServer* timeline_server = LTETimelineServer::get_singleton();
-		double duration = chart_data.is_valid() ? chart_data->get_duration() : double(metadata.get("duration", 0.0));
 		double current_time = 0.0;
 		if (timeline_server) {
 			current_time = timeline_server->get_time_from_playhead(source_uuid, chart_path);
 		}
 
-		Dictionary config = fetch_graph_editor_config(uuid);
 		Dictionary model;
 		model["uuid"] = uuid;
 		model["source_uuid"] = source_uuid;
 		model["chart_path"] = chart_path;
 		model["has_chart"] = true;
-		model["duration"] = duration;
 		model["current_time"] = current_time;
-		model["snap_mode"] = config["snap_mode"];
-		model["per_bar"] = config["per_bar"];
-		model["speeds"] = _normalize_speeds(chart.get("speed", Array()));
-		model["bpms"] = chart_data.is_valid() ? chart_data->get_bpm_events() : Array(chart.get("bpm", Array()));
-		model["chart"] = chart.duplicate(true);
 		model["chart_data"] = chart_data;
 		return model;
 	}
@@ -428,7 +411,8 @@ namespace godot {
 
 	Dictionary LTEGraphEditorServer::submit_speed_curve(const String& uuid, const String& chart_path, const Array& speeds) {
 		Dictionary opened_chart = _find_opened_chart_by_path(chart_path);
-		if (opened_chart.is_empty()) {
+		Ref<ChartData> chart_data = opened_chart.get("chart_data", Variant());
+		if (chart_data.is_null()) {
 			Dictionary model = fetch_speed_graph_model(uuid);
 			emit_signal("speed_graph_model_changed", uuid, model);
 			return model;
@@ -436,7 +420,7 @@ namespace godot {
 
 		String source_uuid = opened_chart.get("uuid", String());
 		String opened_chart_path = opened_chart.get("path", chart_path);
-		Dictionary chart = opened_chart.get("chart", Dictionary()).duplicate(true);
+		Dictionary chart = chart_data->get_snapshot();
 		chart["speed"] = _normalize_speeds(speeds);
 
 		LTETimelineServer* timeline_server = LTETimelineServer::get_singleton();
