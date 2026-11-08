@@ -15,6 +15,7 @@ namespace godot {
 	void LTEGraphEditorServer::_bind_methods() {
 		ClassDB::bind_method(D_METHOD("fetch_graph_editor_config", "uuid"), &LTEGraphEditorServer::fetch_graph_editor_config);
 		ClassDB::bind_method(D_METHOD("set_playhead_auto_scroll", "uuid", "enable"), &LTEGraphEditorServer::set_playhead_auto_scroll);
+		ClassDB::bind_method(D_METHOD("set_per_bar", "uuid", "per_bar"), &LTEGraphEditorServer::set_per_bar);
 		ClassDB::bind_method(D_METHOD("set_split_ratio", "uuid", "ratio"), &LTEGraphEditorServer::set_split_ratio);
 		ClassDB::bind_method(D_METHOD("set_curve_view", "uuid", "curve_id", "scroll_offset", "content_scale"), &LTEGraphEditorServer::set_curve_view);
 		ClassDB::bind_method(D_METHOD("set_curve_tree_scroll", "uuid", "scroll"), &LTEGraphEditorServer::set_curve_tree_scroll);
@@ -119,7 +120,7 @@ namespace godot {
 		model["duration"] = 0.0;
 		model["current_time"] = 0.0;
 		model["snap_mode"] = false;
-		model["per_bar"] = 4;
+		model["per_bar"] = fetch_graph_editor_config(uuid)["per_bar"];
 		model["speeds"] = Array();
 		model["bpms"] = Array();
 		model["chart"] = Dictionary();
@@ -142,12 +143,10 @@ namespace godot {
 		double duration = chart_data.is_valid() ? chart_data->get_duration() : double(metadata.get("duration", 0.0));
 		double current_time = 0.0;
 		bool snap_mode = false;
-		int per_bar = 4;
 		if (timeline_server) {
 			Dictionary config = timeline_server->fetch_timeline_config(source_uuid, chart_path);
 			current_time = timeline_server->get_time_from_playhead(source_uuid, chart_path);
 			snap_mode = config.get("snap_mode", false);
-			per_bar = config.get("chart_per_bar", per_bar);
 		}
 
 		Dictionary model;
@@ -158,9 +157,9 @@ namespace godot {
 		model["duration"] = duration;
 		model["current_time"] = current_time;
 		model["snap_mode"] = snap_mode;
-		model["per_bar"] = per_bar;
+		model["per_bar"] = fetch_graph_editor_config(uuid)["per_bar"];
 		model["speeds"] = _normalize_speeds(chart.get("speed", Array()));
-		model["bpms"] = chart.get("bpm", Array());
+		model["bpms"] = chart_data.is_valid() ? chart_data->get_bpm_events() : Array(chart.get("bpm", Array()));
 		model["chart"] = chart.duplicate(true);
 		model["chart_data"] = chart_data;
 		return model;
@@ -251,6 +250,8 @@ namespace godot {
 	Dictionary LTEGraphEditorServer::fetch_graph_editor_config(const String& uuid) const {
 		Dictionary config;
 		config["playhead_auto_scroll"] = true;
+		config["per_bar"] = 4;
+		config["per_bars"] = LTESettingsConfig::get_default_timeline_panel_per_bars();
 		config["split_ratio"] = 0.25;
 		config["curve_views"] = Dictionary();
 		if (uuid.is_empty()) {
@@ -264,6 +265,7 @@ namespace godot {
 		Variant view_settings_value = settings_config->graph_editor_view_settings.get(uuid, Dictionary());
 		if (view_settings_value.get_type() == Variant::DICTIONARY) {
 			Dictionary view_settings = view_settings_value;
+			config["per_bar"] = std::max(1, int(view_settings.get("per_bar", config["per_bar"])));
 			config["split_ratio"] = view_settings.get("split_ratio", config["split_ratio"]);
 			config["curve_views"] = view_settings.get("curve_views", config["curve_views"]);
 			config["curve_tree_scroll"] = view_settings.get("curve_tree_scroll", Vector2(-1, -1));
@@ -281,6 +283,21 @@ namespace godot {
 		}
 		settings_config->graph_editor_playhead_auto_scroll[uuid] = enable;
 		settings_config->save_settings_config();
+	}
+
+	void LTEGraphEditorServer::set_per_bar(const String& uuid, int per_bar) {
+		LTESettingsConfig* settings_config = LTESettingsConfig::get_singleton();
+		if (uuid.is_empty() || !settings_config) {
+			return;
+		}
+		Dictionary view_settings = settings_config->graph_editor_view_settings.get(uuid, Dictionary());
+		per_bar = std::max(1, per_bar);
+		if (int(view_settings.get("per_bar", 4)) == per_bar) {
+			return;
+		}
+		view_settings["per_bar"] = per_bar;
+		settings_config->graph_editor_view_settings[uuid] = view_settings;
+		settings_config->save_settings_config(false);
 	}
 
 	void LTEGraphEditorServer::set_split_ratio(const String& uuid, const double ratio) {
