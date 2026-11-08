@@ -268,6 +268,12 @@ namespace godot {
 				scene_layers_settings = file->get_value("scene_layers_panel", "scene_settings", Dictionary());
 			graph_editor_playhead_auto_scroll = file->get_value("graph_editor", "playhead_auto_scroll", Dictionary());
 			graph_editor_view_settings = file->get_value("graph_editor", "view_settings", Dictionary());
+			for (const Variant& value : graph_editor_view_settings.values()) {
+				if (value.get_type() == Variant::DICTIONARY) {
+					Dictionary view_settings = value;
+					view_settings.erase("curve_tree_scroll");
+				}
+			}
 			audio_visualizer_configs = file->get_value("audio_visualizer", "configs", Dictionary());
 			audio_preview_chart_settings = file->get_value("audio_preview", "chart_settings", Dictionary());
 			note_skin_designer_configs = file->get_value("note_skin_designer", "configs", Dictionary());

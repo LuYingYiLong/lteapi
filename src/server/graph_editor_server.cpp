@@ -19,7 +19,6 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("set_snap_mode", "uuid", "enabled"), &LTEGraphEditorServer::set_snap_mode);
 		ClassDB::bind_method(D_METHOD("set_split_ratio", "uuid", "ratio"), &LTEGraphEditorServer::set_split_ratio);
 		ClassDB::bind_method(D_METHOD("set_curve_view", "uuid", "curve_id", "scroll_offset", "content_scale"), &LTEGraphEditorServer::set_curve_view);
-		ClassDB::bind_method(D_METHOD("set_curve_tree_scroll", "uuid", "scroll"), &LTEGraphEditorServer::set_curve_tree_scroll);
 		ClassDB::bind_method(D_METHOD("find_adjacent_keyframe_time", "keyframe_times", "current_time", "forward"), &LTEGraphEditorServer::find_adjacent_keyframe_time);
 		ClassDB::bind_method(D_METHOD("fetch_speed_graph_model", "uuid"), &LTEGraphEditorServer::fetch_speed_graph_model);
 		ClassDB::bind_method(D_METHOD("set_active_chart_path", "uuid", "chart_path"), &LTEGraphEditorServer::set_active_chart_path);
@@ -112,20 +111,18 @@ namespace godot {
 		return Dictionary();
 	}
 
-	Dictionary LTEGraphEditorServer::_make_empty_model(const String& uuid) const {
+	Dictionary LTEGraphEditorServer::_make_empty_model() const {
 		Dictionary model;
-		model["uuid"] = uuid;
 		model["source_uuid"] = String();
 		model["chart_path"] = String();
-		model["has_chart"] = false;
 		model["current_time"] = 0.0;
 		model["chart_data"] = Variant();
 		return model;
 	}
 
-	Dictionary LTEGraphEditorServer::_make_model(const String& uuid, const Dictionary& opened_chart) const {
+	Dictionary LTEGraphEditorServer::_make_model(const Dictionary& opened_chart) const {
 		if (opened_chart.is_empty()) {
-			return _make_empty_model(uuid);
+			return _make_empty_model();
 		}
 
 		String chart_path = opened_chart.get("path", String());
@@ -139,10 +136,8 @@ namespace godot {
 		}
 
 		Dictionary model;
-		model["uuid"] = uuid;
 		model["source_uuid"] = source_uuid;
 		model["chart_path"] = chart_path;
-		model["has_chart"] = true;
 		model["current_time"] = current_time;
 		model["chart_data"] = chart_data;
 		return model;
@@ -253,7 +248,6 @@ namespace godot {
 			config["snap_mode"] = view_settings.get("snap_mode", config["snap_mode"]);
 			config["split_ratio"] = view_settings.get("split_ratio", config["split_ratio"]);
 			config["curve_views"] = view_settings.get("curve_views", config["curve_views"]);
-			config["curve_tree_scroll"] = view_settings.get("curve_tree_scroll", Vector2(-1, -1));
 		}
 		return config;
 	}
@@ -335,21 +329,6 @@ namespace godot {
 		settings_config->save_settings_config();
 	}
 
-	void LTEGraphEditorServer::set_curve_tree_scroll(const String& uuid, const Vector2& scroll) {
-		if (uuid.is_empty()) {
-			return;
-		}
-		LTESettingsConfig* settings_config = LTESettingsConfig::get_singleton();
-		if (!settings_config) {
-			return;
-		}
-		Dictionary view_settings = settings_config->graph_editor_view_settings.get(uuid, Dictionary());
-		view_settings = view_settings.duplicate(true);
-		view_settings["curve_tree_scroll"] = scroll;
-		settings_config->graph_editor_view_settings[uuid] = view_settings;
-		settings_config->save_settings_config();
-	}
-
 	double LTEGraphEditorServer::find_adjacent_keyframe_time(const Array& keyframe_times, const double current_time, const bool forward) const {
 		std::vector<double> times;
 		times.reserve(keyframe_times.size());
@@ -395,11 +374,11 @@ namespace godot {
 		}
 		if (opened_chart.is_empty()) {
 			active_chart_paths.erase(uuid);
-			return _make_empty_model(uuid);
+			return _make_empty_model();
 		}
 
 		active_chart_paths[uuid] = opened_chart.get("path", String());
-		return _make_model(uuid, opened_chart);
+		return _make_model(opened_chart);
 	}
 
 	Dictionary LTEGraphEditorServer::set_active_chart_path(const String& uuid, const String& chart_path) {
