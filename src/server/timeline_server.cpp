@@ -50,7 +50,6 @@ namespace godot {
         ClassDB::bind_method(D_METHOD("open_chart", "uuid", "chart_path"), &LTETimelineServer::open_chart);
         ClassDB::bind_method(D_METHOD("get_opened_chart_list"), &LTETimelineServer::get_opened_chart_list);
         ClassDB::bind_method(D_METHOD("get_chart_data", "chart_path"), &LTETimelineServer::get_chart_data);
-        ClassDB::bind_method(D_METHOD("get_chart_helper", "uuid", "chart_path"), &LTETimelineServer::get_chart_helper);
         ClassDB::bind_method(D_METHOD("enable_playhead_auto_scroll", "uuid", "enable"), &LTETimelineServer::enable_playhead_auto_scroll);
         ClassDB::bind_method(D_METHOD("enable_show_audio_waveform", "uuid", "enable"), &LTETimelineServer::enable_show_audio_waveform);
         ClassDB::bind_method(D_METHOD("enable_smooth_audio_waveform", "uuid", "enable"), &LTETimelineServer::enable_smooth_audio_waveform);
@@ -126,7 +125,6 @@ namespace godot {
         opened_chart.path = chart_path;
         opened_chart.path_key = path_key;
         opened_chart.data = document->data;
-        opened_chart.helper = document->data->create_helper();
         Dictionary col_cfg_dict = settings_config->timeline_panel_chart_column_configs.get(uuid, Dictionary());
         opened_chart.column_config = col_cfg_dict.get(chart_path, Array());
 
@@ -138,7 +136,6 @@ namespace godot {
             per_bar_dict[per_bar_key] = 4;
             settings_config->timeline_panel_chart_per_bar[uuid] = per_bar_dict;
         }
-        opened_chart.helper->set_per_bar(per_bar_dict.get(per_bar_key, 4));
 
         Dictionary playhead_dict = settings_config->timeline_panel_chart_playhead.get(uuid, Dictionary());
         if (!playhead_dict.has(chart_path)) {
@@ -172,7 +169,7 @@ namespace godot {
         info["saved"] = !opened_chart.data->is_dirty();
         info["save_revision"] = opened_chart.data->get_revision();
         info["column_config"] = opened_chart.column_config;
-        info["chart_helper"] = opened_chart.helper;
+        info["chart_data"] = opened_chart.data;
         return info;
     }
 
@@ -181,8 +178,8 @@ namespace godot {
         if (!opened_chart) {
             return;
         }
-        Ref<ChartHelper> helper = p_opened_chart.get("chart_helper", Variant());
-        if (helper.is_valid() && helper != opened_chart->helper) {
+        Ref<ChartData> data = p_opened_chart.get("chart_data", Variant());
+        if (data.is_valid() && data != opened_chart->data) {
             return;
         }
         _apply_chart_snapshot(opened_chart->path, opened_chart->data, p_target_chart);
@@ -198,7 +195,6 @@ namespace godot {
         Array changed_views;
         for (const OpenedChart& opened_chart : opened_charts) {
             if (opened_chart.data == data) {
-                data->refresh_helper(opened_chart.helper);
                 changed_views.append(_make_chart_info(opened_chart));
             }
         }
@@ -310,9 +306,9 @@ namespace godot {
         return Utils::resolve_project_path(chart_path, _get_project_path());
     }
 
-    Ref<ChartHelper> LTETimelineServer::_get_chart_helper_for_path(const String& chart_path) const {
+    Ref<ChartData> LTETimelineServer::_get_chart_data_for_path(const String& chart_path) const {
         Ref<ChartData> data = get_chart_data(chart_path);
-        return data.is_valid() ? data->create_helper() : ChartHelper::open(_get_absolute_chart_path(chart_path));
+        return data.is_valid() ? data : ChartData::open(_get_absolute_chart_path(chart_path), false);
     }
 
     String LTETimelineServer::_resolve_chart_setting_key(const Dictionary& chart_dict, const String& chart_path) const {
@@ -450,12 +446,12 @@ namespace godot {
         return document ? document->data : Ref<ChartData>();
     }
 
-    Ref<ChartHelper> LTETimelineServer::get_chart_helper(const String& uuid, const String& chart_path) {
+    Ref<ChartData> LTETimelineServer::_get_view_chart_data(const String& uuid, const String& chart_path) {
         const OpenedChart* opened_chart = _find_opened_chart(uuid, chart_path);
         if (!opened_chart) {
             opened_chart = _record_chart_data(uuid, chart_path);
         }
-        return opened_chart ? opened_chart->helper : Ref<ChartHelper>();
+        return opened_chart ? opened_chart->data : Ref<ChartData>();
     }
 
     void LTETimelineServer::enable_playhead_auto_scroll(const String& uuid, const bool enable) {
@@ -633,9 +629,9 @@ namespace godot {
         Dictionary all_points_dict = settings_config->timeline_panel_chart_in_out_points;
         String point_key = _resolve_chart_setting_key(all_points_dict, chart_path);
         Array in_out_points = all_points_dict.get(point_key, Array());
-        Ref<ChartHelper> helper = _get_chart_helper_for_path(chart_path);
-        if (helper.is_null()) return;
-        double duration = helper.is_valid() ? helper->get_duration() : 0.0;
+        Ref<ChartData> data = _get_chart_data_for_path(chart_path);
+        if (data.is_null()) return;
+        double duration = data->get_duration();
         if (current_time < 0.0) current_time = 0.0;
         if (duration > 0.0 && current_time > duration) current_time = duration;
 
@@ -643,7 +639,7 @@ namespace godot {
         double out_point;
 
         if (in_out_points.is_empty()) {
-            out_point = helper.is_valid() ? helper->get_duration() : 0.0;
+            out_point = duration;
             in_point = current_time;
 
             Array new_pair;
@@ -737,9 +733,9 @@ namespace godot {
         Dictionary all_points_dict = settings_config->timeline_panel_chart_in_out_points;
         String point_key = _resolve_chart_setting_key(all_points_dict, chart_path);
         Array in_out_points = all_points_dict.get(point_key, Array());
-        Ref<ChartHelper> helper = _get_chart_helper_for_path(chart_path);
-        if (helper.is_null()) return;
-        double duration = helper.is_valid() ? helper->get_duration() : 0.0;
+        Ref<ChartData> data = _get_chart_data_for_path(chart_path);
+        if (data.is_null()) return;
+        double duration = data->get_duration();
         if (current_time < 0.0) current_time = 0.0;
         if (duration > 0.0 && current_time > duration) current_time = duration;
         double in_point;
@@ -887,8 +883,7 @@ namespace godot {
     }
 
     void LTETimelineServer::set_chart_per_bar(const String& uuid, const String& chart_path, int per_bar) {
-        Ref<ChartHelper> helper = get_chart_helper(uuid, chart_path);
-        if (helper.is_valid()) helper->set_per_bar(per_bar);
+        per_bar = Math::max(per_bar, 1);
         Dictionary chart_list = settings_config->timeline_panel_chart_per_bar.get(uuid, Dictionary());
         String per_bar_key = _resolve_chart_setting_key(chart_list, chart_path);
         chart_list[per_bar_key] = per_bar;
@@ -919,16 +914,16 @@ namespace godot {
     }
 
     double LTETimelineServer::get_time_from_playhead(const String& uuid, const String& chart_path) {
-        Ref<ChartHelper> helper = get_chart_helper(uuid, chart_path);
-        if (helper.is_null()) return 0.0;
+        Ref<ChartData> data = _get_view_chart_data(uuid, chart_path);
+        if (data.is_null()) return 0.0;
         Dictionary playhead_dict = settings_config->timeline_panel_chart_playhead.get(uuid, Dictionary());
         double playhead = playhead_dict.get(chart_path, 0.0);
-        return helper->beat_to_time(playhead);
+        return data->beat_to_time(playhead);
     }
 
     double LTETimelineServer::get_chart_duration(const String& uuid, const String& chart_path) {
-        Ref<ChartHelper> helper = get_chart_helper(uuid, chart_path);
-        return helper.is_valid() ? helper->get_duration() : 0.0;
+        Ref<ChartData> data = _get_view_chart_data(uuid, chart_path);
+        return data.is_valid() ? data->get_duration() : 0.0;
     }
 
     Dictionary LTETimelineServer::submit_chart_changes(const String& uuid, const String& chart_path, const Dictionary& new_chart) {
@@ -978,53 +973,49 @@ namespace godot {
     }
 
     double LTETimelineServer::time_step_back(const String& chart_path, const double time) const {
-        Ref<ChartHelper> helper = _get_chart_helper_for_path(chart_path);
-        if (helper.is_null()) {
+        Ref<ChartData> data = _get_chart_data_for_path(chart_path);
+        if (data.is_null()) {
             ERR_PRINT("time_step_back: Failed to open chart path");
             return 0.0;
         }
         int per_bar = settings_config->timeline_panel_chart_per_bar.get(chart_path, 4);
-        helper->set_per_bar(per_bar);
         int64_t row = UtilityFunctions::clampi(
-            UtilityFunctions::snappedi(helper->time_to_row(time) - 1, 1),
-            0, (double)helper->get_row_total()
+            UtilityFunctions::snappedi(data->time_to_row(time, per_bar) - 1, 1),
+            0, data->get_row_total(per_bar)
         );
-        return helper->row_to_time((double)row);
+        return data->row_to_time((double)row, per_bar);
     }
 
     double LTETimelineServer::time_step_forward(const String& chart_path, const double time) const {
-        Ref<ChartHelper> helper = _get_chart_helper_for_path(chart_path);
-        if (helper.is_null()) {
-            ERR_PRINT("time_step_back: Failed to open chart path");
+        Ref<ChartData> data = _get_chart_data_for_path(chart_path);
+        if (data.is_null()) {
+            ERR_PRINT("time_step_forward: Failed to open chart path");
             return time;
         }
         int per_bar = settings_config->timeline_panel_chart_per_bar.get(chart_path, 4);
-        helper->set_per_bar(per_bar);
         int64_t row = UtilityFunctions::clampi(
-            UtilityFunctions::snappedi(helper->time_to_row(time) + 1, 1),
-            0, (double)helper->get_row_total()
+            UtilityFunctions::snappedi(data->time_to_row(time, per_bar) + 1, 1),
+            0, data->get_row_total(per_bar)
         );
-        return helper->row_to_time((double)row);
+        return data->row_to_time((double)row, per_bar);
     }
 
     int LTETimelineServer::step_back(const String& uuid, const String& chart_path, const int current_row, const int per_bar) {
-        Ref<ChartHelper> helper = get_chart_helper(uuid, chart_path);
-        if (helper.is_null()) return current_row;
-        helper->set_per_bar(per_bar);
+        Ref<ChartData> data = _get_view_chart_data(uuid, chart_path);
+        if (data.is_null()) return current_row;
         int row = Math::clamp(
             Math::snapped((double)current_row - 1, 1.0),
-            0.0, (double)helper->get_row_total()
+            0.0, data->get_row_total(per_bar)
         );
         return row;
     }
 
     int LTETimelineServer::step_forward(const String& uuid, const String& chart_path, const int current_row, const int per_bar) {
-        Ref<ChartHelper> helper = get_chart_helper(uuid, chart_path);
-        if (helper.is_null()) return current_row;
-        helper->set_per_bar(per_bar);
+        Ref<ChartData> data = _get_view_chart_data(uuid, chart_path);
+        if (data.is_null()) return current_row;
         int row = Math::clamp(
             Math::snapped((double)current_row + 1, 1.0),
-            0.0, (double)helper->get_row_total()
+            0.0, data->get_row_total(per_bar)
         );
         return row;
     }

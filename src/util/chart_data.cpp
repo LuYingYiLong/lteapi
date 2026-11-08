@@ -2,6 +2,7 @@
 
 #include "utils.h"
 
+#include <algorithm>
 #include <initializer_list>
 
 namespace godot {
@@ -71,11 +72,26 @@ namespace godot {
 					has_valid_entries(chart, "speed", { "beat", "speed" }) &&
 					has_valid_entries(chart, "road", { "beat", "key_total" });
 		}
+
+		Array read_bpm_events(const Dictionary& chart) {
+			Variant events = chart.get("bpm", Variant());
+			return events.get_type() == Variant::ARRAY ? Array(events) : Array();
+		}
+
+		double read_duration(const Dictionary& chart) {
+			Variant metadata = chart.get("metadata", Variant());
+			double duration = 0.0;
+			if (metadata.get_type() == Variant::DICTIONARY && read_number(Dictionary(metadata).get("duration", 0.0), duration)) {
+				return duration;
+			}
+			return 0.0;
+		}
 	}
 
 	void ChartData::_bind_methods() {
 		ClassDB::bind_static_method("ChartData", D_METHOD("open", "path", "validate_for_play"), &ChartData::open, DEFVAL(true));
 		ClassDB::bind_static_method("ChartData", D_METHOD("from_dictionary", "snapshot"), &ChartData::from_dictionary);
+		ClassDB::bind_static_method("ChartData", D_METHOD("from_timing", "bpms", "duration"), &ChartData::from_timing);
 		ClassDB::bind_method(D_METHOD("get_snapshot"), &ChartData::get_snapshot);
 		ClassDB::bind_method(D_METHOD("get_metadata"), &ChartData::get_metadata);
 		ClassDB::bind_method(D_METHOD("get_bpm_events"), &ChartData::get_bpm_events);
@@ -83,6 +99,16 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("get_revision"), &ChartData::get_revision);
 		ClassDB::bind_method(D_METHOD("is_dirty"), &ChartData::is_dirty);
 		ClassDB::bind_method(D_METHOD("get_audio_path"), &ChartData::get_audio_path);
+		ClassDB::bind_method(D_METHOD("get_duration"), &ChartData::get_duration);
+		ClassDB::bind_method(D_METHOD("get_beat_total"), &ChartData::get_beat_total);
+		ClassDB::bind_method(D_METHOD("get_row_total", "per_bar"), &ChartData::get_row_total);
+		ClassDB::bind_method(D_METHOD("matches_timing", "bpms", "duration"), &ChartData::matches_timing);
+		ClassDB::bind_method(D_METHOD("beat_to_time", "beat"), &ChartData::beat_to_time);
+		ClassDB::bind_method(D_METHOD("time_to_beat", "time_sec"), &ChartData::time_to_beat);
+		ClassDB::bind_method(D_METHOD("time_to_row", "time_sec", "per_bar"), &ChartData::time_to_row);
+		ClassDB::bind_method(D_METHOD("row_to_time", "row", "per_bar"), &ChartData::row_to_time);
+		ClassDB::bind_static_method("ChartData", D_METHOD("beat_to_row", "beat", "per_bar"), &ChartData::beat_to_row);
+		ClassDB::bind_static_method("ChartData", D_METHOD("row_to_beat", "row", "per_bar"), &ChartData::row_to_beat);
 	}
 
 	Ref<ChartData> ChartData::open(const String& path, bool validate_for_play) {
@@ -106,6 +132,16 @@ namespace godot {
 		return data;
 	}
 
+	Ref<ChartData> ChartData::from_timing(const Array& bpms, double duration) {
+		Ref<ChartData> data;
+		data.instantiate();
+		Dictionary metadata;
+		metadata["duration"] = duration;
+		data->chart["metadata"] = metadata;
+		data->chart["bpm"] = bpms.duplicate(true);
+		return data;
+	}
+
 	Dictionary ChartData::get_snapshot() const {
 		return chart.duplicate(true);
 	}
@@ -116,8 +152,7 @@ namespace godot {
 	}
 
 	Array ChartData::get_bpm_events() const {
-		Variant bpms = chart.get("bpm", Variant());
-		return bpms.get_type() == Variant::ARRAY ? Array(bpms).duplicate(true) : Array();
+		return read_bpm_events(chart).duplicate(true);
 	}
 
 	int ChartData::get_initial_key_total() const {
@@ -155,15 +190,108 @@ namespace godot {
 		return metadata.get("audio", String());
 	}
 
-	Ref<ChartHelper> ChartData::create_helper() const {
-		return ChartHelper::from_dictionary(chart);
+	double ChartData::get_duration() const {
+		return read_duration(chart);
 	}
 
-	void ChartData::refresh_helper(const Ref<ChartHelper>& helper) const {
-		helper->update_from_chart(chart);
+	bool ChartData::matches_timing(const Array& bpms, double duration) const {
+		return get_duration() == duration && read_bpm_events(chart) == bpms;
+	}
+
+	void ChartData::_ensure_timing() const {
+		if (!timing_dirty) {
+			return;
+		}
+		tempo_segments.clear();
+		beat_total = 0.0;
+		timing_duration = get_duration();
+		for (const Variant& entry : read_bpm_events(chart)) {
+			if (entry.get_type() != Variant::DICTIONARY) {
+				continue;
+			}
+			Dictionary bpm_event = entry;
+			TempoSegment segment{ 0.0, 0.0, 120.0 };
+			if (!read_number(bpm_event.get("beat", 0.0), segment.beat)) {
+				segment.beat = 0.0;
+			}
+			if (!read_number(bpm_event.get("bpm", 120.0), segment.bpm) || segment.bpm == 0.0) {
+				segment.bpm = 120.0;
+			}
+			if (!tempo_segments.empty()) {
+				const TempoSegment& previous = tempo_segments.back();
+				segment.time = previous.time + (segment.beat - previous.beat) * 60.0 / previous.bpm;
+			}
+			tempo_segments.push_back(segment);
+		}
+		if (!tempo_segments.empty()) {
+			const TempoSegment& last = tempo_segments.back();
+			beat_total = last.beat + std::max(timing_duration - last.time, 0.0) * last.bpm / 60.0;
+		}
+		timing_dirty = false;
+	}
+
+	double ChartData::get_beat_total() const {
+		_ensure_timing();
+		return beat_total;
+	}
+
+	double ChartData::get_row_total(int per_bar) const {
+		return beat_to_row(get_beat_total(), per_bar);
+	}
+
+	double ChartData::beat_to_time(double beat) const {
+		_ensure_timing();
+		if (tempo_segments.empty()) {
+			return 0.0;
+		}
+		for (size_t index = 0; index + 1 < tempo_segments.size(); ++index) {
+			const TempoSegment& segment = tempo_segments[index];
+			if (beat >= segment.beat && beat < tempo_segments[index + 1].beat) {
+				return segment.time + (beat - segment.beat) * 60.0 / segment.bpm;
+			}
+		}
+		const TempoSegment& last = tempo_segments.back();
+		return last.time + (beat - last.beat) * 60.0 / last.bpm;
+	}
+
+	double ChartData::time_to_beat(double time_sec) const {
+		_ensure_timing();
+		if (tempo_segments.empty()) {
+			return 0.0;
+		}
+		for (size_t index = 0; index + 1 < tempo_segments.size(); ++index) {
+			const TempoSegment& segment = tempo_segments[index];
+			if (time_sec >= segment.time && time_sec < tempo_segments[index + 1].time) {
+				return segment.beat + (time_sec - segment.time) * segment.bpm / 60.0;
+			}
+		}
+		const TempoSegment& last = tempo_segments.back();
+		if (time_sec >= last.time && time_sec < timing_duration) {
+			return last.beat + (time_sec - last.time) * last.bpm / 60.0;
+		}
+		return beat_total + (time_sec - timing_duration) * last.bpm / 60.0;
+	}
+
+	double ChartData::beat_to_row(double beat, int per_bar) {
+		return beat * std::max(per_bar, 1);
+	}
+
+	double ChartData::row_to_beat(double row, int per_bar) {
+		return row / std::max(per_bar, 1);
+	}
+
+	double ChartData::time_to_row(double time_sec, int per_bar) const {
+		return beat_to_row(time_to_beat(time_sec), per_bar);
+	}
+
+	double ChartData::row_to_time(double row, int per_bar) const {
+		return beat_to_time(row_to_beat(row, per_bar));
 	}
 
 	void ChartData::replace_snapshot(const Dictionary& snapshot) {
+		if (!timing_dirty) {
+			timing_dirty = !matches_timing(read_bpm_events(snapshot), read_duration(snapshot));
+		}
 		chart = snapshot.duplicate(true);
 		++revision;
 	}

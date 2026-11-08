@@ -1,6 +1,5 @@
 #include "graph_editor_server.h"
 
-#include "chart_helper.h"
 #include "project_manager.h"
 #include "settings_config.h"
 #include "timeline_server.h"
@@ -124,7 +123,7 @@ namespace godot {
 		model["speeds"] = Array();
 		model["bpms"] = Array();
 		model["chart"] = Dictionary();
-		model["chart_helper"] = Variant();
+		model["chart_data"] = Variant();
 		return model;
 	}
 
@@ -138,19 +137,12 @@ namespace godot {
 		String chart_path = opened_chart.get("path", String());
 		String source_uuid = opened_chart.get("uuid", String());
 
-		Ref<ChartHelper> chart_helper;
+		Ref<ChartData> chart_data = opened_chart.get("chart_data", Variant());
 		LTETimelineServer* timeline_server = LTETimelineServer::get_singleton();
-		if (timeline_server) {
-			chart_helper = timeline_server->get_chart_helper(source_uuid, chart_path);
-		}
-
-		double duration = metadata.get("duration", 0.0);
-		if (chart_helper.is_valid()) {
-			duration = chart_helper->get_duration();
-		}
+		double duration = chart_data.is_valid() ? chart_data->get_duration() : double(metadata.get("duration", 0.0));
 		double current_time = 0.0;
 		bool snap_mode = false;
-		int per_bar = chart_helper.is_valid() ? chart_helper->get_per_bar() : 4;
+		int per_bar = 4;
 		if (timeline_server) {
 			Dictionary config = timeline_server->fetch_timeline_config(source_uuid, chart_path);
 			current_time = timeline_server->get_time_from_playhead(source_uuid, chart_path);
@@ -170,7 +162,7 @@ namespace godot {
 		model["speeds"] = _normalize_speeds(chart.get("speed", Array()));
 		model["bpms"] = chart.get("bpm", Array());
 		model["chart"] = chart.duplicate(true);
-		model["chart_helper"] = chart_helper;
+		model["chart_data"] = chart_data;
 		return model;
 	}
 

@@ -156,9 +156,6 @@
     <ClInclude Include="src\util\chart_data.h">
       <Filter>Header File\utils</Filter>
     </ClInclude>
-    <ClInclude Include="src\util\chart_helper.h">
-      <Filter>Header File\utils</Filter>
-    </ClInclude>
     <ClInclude Include="src\util\utils.h">
       <Filter>Header File\utils</Filter>
     </ClInclude>
@@ -309,9 +306,6 @@
       <Filter>Source File\resource</Filter>
     </ClCompile>
     <ClCompile Include="src\util\chart_data.cpp">
-      <Filter>Source File\utils</Filter>
-    </ClCompile>
-    <ClCompile Include="src\util\chart_helper.cpp">
       <Filter>Source File\utils</Filter>
     </ClCompile>
     <ClCompile Include="src\util\utils.cpp">

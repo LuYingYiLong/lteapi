@@ -1,6 +1,6 @@
 #include "lte_chart_note_helper.h"
 
-#include "util/chart_helper.h"
+#include "util/chart_data.h"
 
 #include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -410,15 +410,11 @@ PackedFloat64Array LTEChartNoteHelper::beats_to_times(const PackedFloat64Array& 
 		return result;
 	}
 
-	Ref<ChartHelper> helper;
-	helper.instantiate();
-	helper->set_bpms(chart_data.get("bpm", Array()));
-	helper->set_per_bar(static_cast<int32_t>(chart_data.get("per_bar", 1)));
-	helper->set_duration(static_cast<double>(chart_data.get("duration", 0.0)));
+	Ref<ChartData> timing = ChartData::from_timing(chart_data.get("bpm", Array()), chart_data.get("duration", 0.0));
 
 	result.resize(beats.size());
 	for (int32_t i = 0; i < beats.size(); ++i) {
-		result[i] = helper->beat_to_time(beats[i]);
+		result[i] = timing->beat_to_time(beats[i]);
 	}
 	return result;
 }
@@ -429,15 +425,11 @@ PackedFloat64Array LTEChartNoteHelper::times_to_beats(const PackedFloat64Array& 
 		return result;
 	}
 
-	Ref<ChartHelper> helper;
-	helper.instantiate();
-	helper->set_bpms(chart_data.get("bpm", Array()));
-	helper->set_per_bar(static_cast<int32_t>(chart_data.get("per_bar", 1)));
-	helper->set_duration(static_cast<double>(chart_data.get("duration", 0.0)));
+	Ref<ChartData> timing = ChartData::from_timing(chart_data.get("bpm", Array()), chart_data.get("duration", 0.0));
 
 	result.resize(times.size());
 	for (int32_t i = 0; i < times.size(); ++i) {
-		result[i] = helper->time_to_beat(times[i]);
+		result[i] = timing->time_to_beat(times[i]);
 	}
 	return result;
 }

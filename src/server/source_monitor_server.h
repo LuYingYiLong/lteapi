@@ -13,7 +13,6 @@
 #include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
-#include "chart_helper.h"
 #include "file_system_server.h"
 #include "settings_config.h"
 #include "utils.h"

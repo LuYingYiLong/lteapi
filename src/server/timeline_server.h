@@ -41,7 +41,6 @@ namespace godot
 			String path_key;
 			Array column_config;
 			Ref<ChartData> data;
-			Ref<ChartHelper> helper;
 		};
 
 		LTESettingsConfig* settings_config = nullptr;
@@ -64,7 +63,8 @@ namespace godot
 		int _find_single_in_point(const String& chart_path);
 		String _get_project_path() const;
 		String _get_absolute_chart_path(const String& chart_path) const;
-		Ref<ChartHelper> _get_chart_helper_for_path(const String& chart_path) const;
+		Ref<ChartData> _get_chart_data_for_path(const String& chart_path) const;
+		Ref<ChartData> _get_view_chart_data(const String& uuid, const String& chart_path);
 		String _resolve_chart_setting_key(const Dictionary& chart_dict, const String& chart_path) const;
 		// 辅助排序函数
 		bool _sort_in_out_compare(const Variant& a, const Variant& b) const;
@@ -84,7 +84,6 @@ namespace godot
 		void open_chart(const String& uuid, const String& chart_path);
 		Array get_opened_chart_list();
 		Ref<ChartData> get_chart_data(const String& chart_path) const;
-		Ref<ChartHelper> get_chart_helper(const String& uuid, const String& chart_path);
 		void enable_playhead_auto_scroll(const String& uuid, const bool enable);
 		void enable_show_audio_waveform(const String& uuid, const bool enable);
 		void enable_smooth_audio_waveform(const String& uuid, const bool enable);

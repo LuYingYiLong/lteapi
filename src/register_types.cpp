@@ -17,7 +17,6 @@
 #include "controls/time_scrubber.h"
 #include "utils.h"
 #include "chart_data.h"
-#include "chart_helper.h"
 #include "zip_helper.h"
 #include "lightech_zip_reader.h"
 #include "settings_config.h"
@@ -109,7 +108,6 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(LTEPreferenceConfigHandle);
 	GDREGISTER_CLASS(LTEPreferenceConfigSchema);
 	GDREGISTER_CLASS(Utils);
-	GDREGISTER_CLASS(ChartHelper);
 	GDREGISTER_CLASS(ChartData);
 	GDREGISTER_CLASS(ZipHelper);
 	GDREGISTER_CLASS(LightechZipReader);

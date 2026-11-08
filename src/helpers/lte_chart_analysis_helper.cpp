@@ -171,7 +171,7 @@ Dictionary LTEChartAnalysisHelper::analyze_chart(const Dictionary& chart, const 
 		ts["total"] = static_cast<int32_t>(ts["total"]) + 1;
 		track_stats[key_str] = ts;
 
-		// 事件时间（用简单的 beat → time 估算，不依赖 ChartHelper）
+		// 用简单的 beat → time 估算事件时间
 		event_times.append(end_beat);
 
 		// 同一逻辑轨只禁止相同 head，Hold body 重叠合法
