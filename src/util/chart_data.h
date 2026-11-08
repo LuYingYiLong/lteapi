@@ -16,8 +16,12 @@ namespace godot {
 		static void _bind_methods();
 
 	public:
+		static Ref<ChartData> open(const String& path, bool validate_for_play = true);
 		static Ref<ChartData> from_dictionary(const Dictionary& snapshot);
 		Dictionary get_snapshot() const;
+		Dictionary get_metadata() const;
+		Array get_bpm_events() const;
+		int get_initial_key_total() const;
 		int64_t get_revision() const;
 		bool is_dirty() const;
 		String get_audio_path() const;

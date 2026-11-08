@@ -114,11 +114,11 @@ namespace godot {
         String path_key = chart_path_key(absolute_path);
         const ChartDocument* document = chart_documents.getptr(path_key);
         if (!document) {
-            Dictionary chart = Utils::load_json_file(absolute_path);
-            if (chart.is_empty()) {
+            Ref<ChartData> data = ChartData::open(absolute_path, false);
+            if (data.is_null()) {
                 return nullptr;
             }
-            document = &chart_documents.insert(path_key, { absolute_path, ChartData::from_dictionary(chart) })->value;
+            document = &chart_documents.insert(path_key, { absolute_path, data })->value;
         }
 
         OpenedChart opened_chart;
@@ -913,9 +913,9 @@ namespace godot {
         }
         Ref<ChartData> data = get_chart_data(chart_path);
         if (data.is_null()) {
-            data = ChartData::from_dictionary(Utils::load_json_file(absolute_path));
+            data = ChartData::open(absolute_path, false);
         }
-        return root_dir + data->get_audio_path();
+        return data.is_valid() ? root_dir + data->get_audio_path() : root_dir;
     }
 
     double LTETimelineServer::get_time_from_playhead(const String& uuid, const String& chart_path) {

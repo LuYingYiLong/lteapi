@@ -61,6 +61,7 @@ Owns chart editing session state and shares one ChartData per resolved chart pat
 
 ## ChartData
 
+- Loads chart files and validates the playable structure by default. Editor callers can open an in-progress chart with play validation disabled.
 - Owns the in-memory chart snapshot, its content revision, and its saved revision.
 - Exposes independent snapshots for readers. Edits go through LTETimelineServer.
 - Supplies chart timing to ChartHelper. LTEFileSaveServer writes the serialized snapshot.

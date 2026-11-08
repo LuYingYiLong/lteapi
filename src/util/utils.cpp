@@ -4,7 +4,7 @@ namespace godot {
 	void Utils::_bind_methods() {
 		BIND_ENUM_CONSTANT(UUID_V7);
 
-		ClassDB::bind_static_method("Utils", D_METHOD("load_json_file", "file_path"), &Utils::load_json_file);
+		ClassDB::bind_static_method("Utils", D_METHOD("load_json_file", "file_path", "report_errors"), &Utils::load_json_file, DEFVAL(true));
 		ClassDB::bind_static_method("Utils", D_METHOD("save_json_file", "path", "dict"), &Utils::save_json_file, DEFVAL("\t"));
 		ClassDB::bind_static_method("Utils", D_METHOD("hms_to_seconds", "hms_string"), &Utils::hms_to_seconds);
 		ClassDB::bind_static_method("Utils", D_METHOD("ms_to_seconds", "ms_string"), &Utils::ms_to_seconds);
@@ -28,21 +28,25 @@ namespace godot {
 		ClassDB::bind_static_method("Utils", D_METHOD("read_file_content_safe", "file_path"), &Utils::read_file_content_safe);
 	}
 
-	Dictionary Utils::load_json_file(const String& file_path) {
+	Dictionary Utils::load_json_file(const String& file_path, bool report_errors) {
 		Ref<FileAccess> file = FileAccess::open(file_path, FileAccess::READ);
 		if (file.is_null()) {
-            Error err = FileAccess::get_open_error();
-            ERR_PRINT(vformat("Failed to open file: %s. Error Code: %d", file_path, err));
+			if (report_errors) {
+				ERR_PRINT(vformat("Failed to open file: %s. Error Code: %d", file_path, FileAccess::get_open_error()));
+			}
 			return Dictionary();
 		}
 		String content = file->get_as_text();
 		file->close();
-		Variant parse_result = JSON::parse_string(content);
-		if (parse_result.get_type() != Variant::DICTIONARY) {
-			ERR_PRINT(vformat("JSON content is not a dictionary in file: %s", file_path));
+		Ref<JSON> json;
+		json.instantiate();
+		if (json->parse(content) != OK || json->get_data().get_type() != Variant::DICTIONARY) {
+			if (report_errors) {
+				ERR_PRINT(vformat("JSON content is not a dictionary in file: %s", file_path));
+			}
 			return Dictionary();
 		}
-		return parse_result;
+		return json->get_data();
 	}
 
 	Error Utils::save_json_file(const String& path, const Dictionary& dict, const String& indent) {

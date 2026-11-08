@@ -35,7 +35,7 @@ namespace godot
 			UUID_V7
 		};
 
-		static Dictionary load_json_file(const String& file_path);
+		static Dictionary load_json_file(const String& file_path, bool report_errors = true);
 		static Error save_json_file(const String& path, const Dictionary& dict, const String& indent = "\t");
 		static double hms_to_seconds(const String& p_hms_string);
 		static double ms_to_seconds(const String& p_ms_string);
