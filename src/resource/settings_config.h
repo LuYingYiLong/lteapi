@@ -67,6 +67,7 @@ namespace godot {
 		Dictionary source_monitor_view_judgement_line;
 		Dictionary source_monitor_ratio;
 		Dictionary source_monitor_show_clear_color;
+		Dictionary source_monitor_transparent_preview;
 		Dictionary source_monitor_auto_play;
 		Dictionary source_monitor_show_debug_info;
 		Dictionary source_monitor_smart_guides;

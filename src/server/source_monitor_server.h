@@ -109,6 +109,7 @@ namespace godot {
 		void enable_monitor_judgement_line(const String& uuid, const bool enable);
 		void set_monitor_ratio(const String& uuid, const Vector2i& ratio);
 		void enable_monitor_clear_color(const String& uuid, const bool enable);
+		void enable_monitor_transparent_preview(const String& uuid, const bool enable);
 		void enable_monitor_auto_play(const String& uuid, const bool enable);
 		void enable_monitor_debug_info(const String& uuid, const bool enable);
 		void enable_monitor_smart_guides(const String& uuid, const bool enable);

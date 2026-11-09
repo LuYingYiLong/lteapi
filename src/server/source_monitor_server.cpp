@@ -50,6 +50,7 @@ namespace godot {
 		ClassDB::bind_method(D_METHOD("enable_monitor_judgement_line", "uuid", "enable"), &LTESourceMonitorServer::enable_monitor_judgement_line);
 		ClassDB::bind_method(D_METHOD("set_monitor_ratio", "uuid", "ratio"), &LTESourceMonitorServer::set_monitor_ratio);
 		ClassDB::bind_method(D_METHOD("enable_monitor_clear_color", "uuid", "enable"), &LTESourceMonitorServer::enable_monitor_clear_color);
+		ClassDB::bind_method(D_METHOD("enable_monitor_transparent_preview", "uuid", "enable"), &LTESourceMonitorServer::enable_monitor_transparent_preview);
 		ClassDB::bind_method(D_METHOD("enable_monitor_auto_play", "uuid", "enable"), &LTESourceMonitorServer::enable_monitor_auto_play);
 		ClassDB::bind_method(D_METHOD("enable_monitor_debug_info", "uuid", "enable"), &LTESourceMonitorServer::enable_monitor_debug_info);
 		ClassDB::bind_method(D_METHOD("enable_monitor_smart_guides", "uuid", "enable"), &LTESourceMonitorServer::enable_monitor_smart_guides);
@@ -445,6 +446,7 @@ namespace godot {
 		config["ratio"] = settings_config->source_monitor_ratio.get(uuid, Vector2i(16, 9));
 		config["view_judgement_line"] = settings_config->source_monitor_view_judgement_line.get(uuid, false);
 		config["show_clear_color"] = settings_config->source_monitor_show_clear_color.get(uuid, false);
+		config["transparent_preview"] = settings_config->source_monitor_transparent_preview.get(uuid, false);
 		config["auto_play"] = settings_config->source_monitor_auto_play.get(uuid, false);
 		config["show_debug_info"] = settings_config->source_monitor_show_debug_info.get(uuid, false);
 		config["smart_guides"] = settings_config->source_monitor_smart_guides.get(uuid, false);
@@ -910,6 +912,14 @@ namespace godot {
 	void LTESourceMonitorServer::enable_monitor_clear_color(const String& uuid, const bool enable) {
 		settings_config->source_monitor_show_clear_color[uuid] = enable;
 		settings_config->save_settings_config();
+	}
+
+	void LTESourceMonitorServer::enable_monitor_transparent_preview(const String& uuid, const bool enable) {
+		if (uuid.is_empty() || bool(settings_config->source_monitor_transparent_preview.get(uuid, false)) == enable) {
+			return;
+		}
+		settings_config->source_monitor_transparent_preview[uuid] = enable;
+		settings_config->save_settings_config(false);
 	}
 
 	void LTESourceMonitorServer::enable_monitor_auto_play(const String& uuid, const bool enable) {

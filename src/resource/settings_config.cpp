@@ -241,6 +241,7 @@ namespace godot {
 		Ref<ConfigFile> file;
 		file.instantiate();
 		Error error = file->load(project_path + "/.editor/project_settings.cfg");
+		source_monitor_transparent_preview.clear();
 		if (error == OK) {
 			workspace_tabs = file->get_value("editor", "workspace_tabs", Array());
 			last_opened_workspace = file->get_value("editor", "last_opened_workspace", String());
@@ -282,6 +283,7 @@ namespace godot {
 			source_monitor_view_judgement_line = file->get_value("source_monitor", "view_judgement_line", Dictionary());
 			source_monitor_ratio = file->get_value("source_monitor", "ratio", Dictionary());
 			source_monitor_show_clear_color = file->get_value("source_monitor", "show_clear_color", Dictionary());
+			source_monitor_transparent_preview = file->get_value("source_monitor", "transparent_preview", Dictionary());
 			source_monitor_auto_play = file->get_value("source_monitor", "auto_play", Dictionary());
 			source_monitor_show_debug_info = file->get_value("source_monitor", "show_debug_info", Dictionary());
 			source_monitor_smart_guides = file->get_value("source_monitor", "smart_guides", Dictionary());
@@ -366,6 +368,7 @@ namespace godot {
 		file->set_value("source_monitor", "view_judgement_line", source_monitor_view_judgement_line);
 		file->set_value("source_monitor", "ratio", source_monitor_ratio);
 		file->set_value("source_monitor", "show_clear_color", source_monitor_show_clear_color);
+		file->set_value("source_monitor", "transparent_preview", source_monitor_transparent_preview);
 		file->set_value("source_monitor", "auto_play", source_monitor_auto_play);
 		file->set_value("source_monitor", "show_debug_info", source_monitor_show_debug_info);
 		file->set_value("source_monitor", "smart_guides", source_monitor_smart_guides);
@@ -432,6 +435,7 @@ namespace godot {
 		changed = remove_unused_uuid_entries(source_monitor_view_judgement_line, uuids) || changed;
 		changed = remove_unused_uuid_entries(source_monitor_ratio, uuids) || changed;
 		changed = remove_unused_uuid_entries(source_monitor_show_clear_color, uuids) || changed;
+		changed = remove_unused_uuid_entries(source_monitor_transparent_preview, uuids) || changed;
 		changed = remove_unused_uuid_entries(source_monitor_auto_play, uuids) || changed;
 		changed = remove_unused_uuid_entries(source_monitor_show_debug_info, uuids) || changed;
 		changed = remove_unused_uuid_entries(source_monitor_smart_guides, uuids) || changed;
