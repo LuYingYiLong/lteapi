@@ -52,6 +52,7 @@ namespace godot {
 		Control* _get_game_from_instance_id(const uint64_t instance_id, const bool quiet = false) const;
 		Array _get_valid_game_scene_ids(const String& chart_abs_path);
 		void _register_game_scene(const String& chart_abs_path, Control* p_game_scene);
+		bool _leave_previous_chart(const String& uuid, const String& next_chart_path, const int64_t instance_id);
 		bool _call_game_method(const Dictionary& status, const StringName& method);
 		bool _call_game_method(const Dictionary& status, const StringName& method, const Variant& arg0);
 		bool _call_game_method(const Dictionary& status, const StringName& method, const Variant& arg0, const Variant& arg1);

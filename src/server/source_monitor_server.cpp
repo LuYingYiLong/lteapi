@@ -280,6 +280,39 @@ namespace godot {
 		game_scene_instance_ids[chart_abs_path] = ids;
 	}
 
+	bool LTESourceMonitorServer::_leave_previous_chart(const String& uuid, const String& next_chart_path, const int64_t instance_id) {
+		const Array chart_paths = game_scene_instance_ids.keys();
+		for (const Variant& path : chart_paths) {
+			const String chart_path = path;
+			const Array registered_ids = game_scene_instance_ids[chart_path];
+			if (chart_path == next_chart_path || !registered_ids.has(instance_id)) {
+				continue;
+			}
+
+			Dictionary status = get_game_status_by_chart_path(chart_path);
+			double time = status.get("time", 0.0);
+			_try_get_game_time(instance_id, time);
+			Array remaining_ids = _get_valid_game_scene_ids(chart_path);
+			remaining_ids.erase(instance_id);
+			if (remaining_ids.is_empty()) {
+				game_scene_instance_ids.erase(chart_path);
+			} else {
+				game_scene_instance_ids[chart_path] = remaining_ids;
+			}
+			if (!status.is_empty()) {
+				status["game_scene_ids"] = remaining_ids;
+				if (remaining_ids.is_empty() || int64_t(status.get("game_scene_id", 0)) == instance_id) {
+					status["game_scene_id"] = remaining_ids.is_empty() ? int64_t(0) : int64_t(remaining_ids[0]);
+					status["time"] = time;
+				}
+				_store_game_status(status);
+			}
+			_set_saved_monitor_chart_time(uuid, chart_path, time, false);
+			return true;
+		}
+		return false;
+	}
+
 	bool LTESourceMonitorServer::_call_game_method(const Dictionary& status, const StringName& method) {
 		String chart_abs_path = status.get("chart_abs_path", String());
 		Array ids = _get_valid_game_scene_ids(chart_abs_path);
@@ -508,6 +541,7 @@ namespace godot {
 			return;
 		}
 		game_scene_instance_id = p_game_scene ? p_game_scene->get_instance_id() : 0;
+		const bool changed_chart = p_game_scene && _leave_previous_chart(uuid, abs_chart_path, game_scene_instance_id);
 		Dictionary previous_status = get_game_status_by_chart_path(abs_chart_path);
 		double previous_time = previous_status.is_empty() ? _get_saved_monitor_chart_time(uuid, abs_chart_path) : _get_status_game_time(previous_status);
 		bool previous_is_playing = previous_status.get("is_playing", false);
@@ -546,7 +580,7 @@ namespace godot {
 		status_dict["time"] = previous_time;
 		status_dict["is_playing"] = previous_is_playing;
 		status_dict["origin"] = String();
-		if (p_game_scene && previous_time > 0.0 && p_game_scene->has_method("scrub_to_frame")) {
+		if (p_game_scene && (changed_chart || previous_time > 0.0) && p_game_scene->has_method("scrub_to_frame")) {
 			p_game_scene->call("scrub_to_frame", previous_time, false);
 		}
 		if (p_game_scene && previous_is_playing && p_game_scene->has_method("play")) {
