@@ -1673,8 +1673,8 @@ namespace godot {
 		if (panel->has_method("set_uuid")) {
 			panel->call("set_uuid", runtime_uuid.is_empty() ? Utils::uuid(Utils::UUID_V7) : runtime_uuid);
 		}
-		if (!parameters.is_empty() || panel->has_method("set_parameters")) {
-			panel->call("set_parameters", parameters);
+		if (panel->has_method("_apply_open_parameters")) {
+			panel->call("_apply_open_parameters", parameters);
 		}
 		window->show();
 	}
@@ -1767,8 +1767,8 @@ namespace godot {
 		}
 		Node* scene = packed_scene->instantiate();
 		editor_instance->add_child(scene);
-		if (scene->has_method("set_parameters")) {
-			scene->call("set_parameters", parameters);
+		if (scene->has_method("_apply_open_parameters")) {
+			scene->call("_apply_open_parameters", parameters);
 		}
 	}
 

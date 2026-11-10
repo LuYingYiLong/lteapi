@@ -517,7 +517,7 @@ namespace godot {
 		if (difficulty_name.is_empty()) {
 			difficulty_name = abs_chart_path.get_file().get_basename();
 		}
-		if (p_game_scene && p_game_scene->has_method("set_parameters")) {
+		if (p_game_scene && p_game_scene->has_method("_apply_open_parameters")) {
 			Dictionary parameters;
 			parameters["info"] = track_info;
 			parameters["difficulty"] = int64_t(difficulty);
@@ -527,7 +527,7 @@ namespace godot {
 			parameters["debug"] = true;
 			parameters["auto_play"] = true;
 			parameters["show_audio_error_dialog"] = false;
-			p_game_scene->call("set_parameters", parameters);
+			p_game_scene->call("_apply_open_parameters", parameters);
 		}
 		_register_game_scene(abs_chart_path, p_game_scene);
 		Array ids = game_scene_instance_ids.get(abs_chart_path, Array());
@@ -808,7 +808,7 @@ namespace godot {
 		Ref<PackedScene> packed_game = Utils::load<PackedScene>("uid://b7ntx22skglln");
 		if (packed_game.is_valid() && packed_game->can_instantiate()) {
 			Node* game = packed_game->instantiate();
-			if (game->has_method("set_parameters")) {
+			if (game->has_method("_apply_open_parameters")) {
 				bool auto_play = settings_config->source_monitor_auto_play.get(runtime_uuid, false);
 				bool show_debug_info = settings_config->source_monitor_show_debug_info.get(runtime_uuid, false);
 				window->add_child(game);
@@ -823,7 +823,7 @@ namespace godot {
 				parameters["start_time"] = from_sec > 0.0 ? from_sec : 0.0;
 				parameters["show_debug_info"] = show_debug_info;
 				parameters["show_audio_error_dialog"] = false;
-				game->call_deferred("set_parameters", parameters);	// 延迟调用
+				game->call_deferred("_apply_open_parameters", parameters);	// 延迟调用
 			}
 		}
 		else {

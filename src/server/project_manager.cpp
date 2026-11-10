@@ -737,7 +737,7 @@ namespace godot {
 		Ref<PackedScene> packed_game = Utils::load<PackedScene>("uid://b7ntx22skglln");
 		if (packed_game.is_valid() && packed_game->can_instantiate()) {
 			Node* game = packed_game->instantiate();
-			if (game->has_method("set_parameters")) {
+			if (game->has_method("_apply_open_parameters")) {
 				window->add_child(game);
 				Dictionary parameters;
 				parameters["info"] = track_info;
@@ -746,7 +746,7 @@ namespace godot {
 				parameters["root_dir"] = project_root_path;
 				parameters["chart_path"] = abs_chart_path;
 				parameters["auto_play"] = auto_play;
-				game->call_deferred("set_parameters", parameters);	// 延迟调用
+				game->call_deferred("_apply_open_parameters", parameters);	// 延迟调用
 			}
 		}
 		Ref<PackedScene> packed_overlay = Utils::load<PackedScene>("uid://c76rqxy2gq4bh");
