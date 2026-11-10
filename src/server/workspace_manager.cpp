@@ -1644,7 +1644,10 @@ namespace godot {
 			ERR_PRINT("open_window_instance: panel info is empty");
 			return;
 		}
-		String panel_name = panel_info.get("name", "Float Window");
+		String panel_name = panel_info.get("name", "");
+		if (panel_name.is_empty()) {
+			panel_name = "Floating Panel";
+		}
 		Ref<PackedScene> packed_scene = component_registry->get_component_panel_scene(panel_uuid);
 		if (packed_scene.is_null()) {
 			ERR_PRINT("open_window_instance: Failed to load packed scene");
@@ -1695,7 +1698,10 @@ namespace godot {
 			ERR_PRINT("open_window_instance: Failed to load packed scene");
 			return;
 		}
-		String panel_name = panel_info.get("name", "Float Window");
+		String panel_name = panel_info.get("name", "");
+		if (panel_name.is_empty()) {
+			panel_name = "Floating Panel";
+		}
 		Control* control_panel = Object::cast_to<Control>(panel);
 		Window* window = create_empty_window(
 			control_panel != nullptr ? Vector2i(control_panel->get_size()) : Vector2i(1152, 648),

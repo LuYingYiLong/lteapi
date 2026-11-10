@@ -1704,7 +1704,7 @@ namespace godot {
 		else {
 			_delete_dir_recursive(output_path);
 			result["error"] = "CREATE_PLUGIN_PROJECT_FAILED_NAME";
-			result["message"] = vformat("init_plugin.gd exited with code %d", exit_code);
+			result["message"] = vformat(tr("init_plugin.gd exited with code %d"), exit_code);
 		}
 
 		return result;

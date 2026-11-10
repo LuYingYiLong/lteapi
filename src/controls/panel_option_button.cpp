@@ -126,7 +126,10 @@ namespace godot {
 
 	void PanelOptionButton::_append_panel_item(const Dictionary& panel_info, int32_t panel_id) {
 		PopupMenu* popup = get_popup();
-		String panel_name = panel_info.get("name", "Unnamed Panel");
+		String panel_name = panel_info.get("name", "");
+		if (panel_name.is_empty()) {
+			panel_name = "Unnamed Panel";
+		}
 		String panel_uuid = panel_info.get("uuid", "");
 		popup->add_item(panel_name, panel_id);
 		int32_t item_index = popup->get_item_count() - 1;

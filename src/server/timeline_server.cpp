@@ -781,7 +781,9 @@ namespace godot {
                     Array single_arr = in_out_points[single_in_point_index];
                     double single_time = static_cast<double>(single_arr[0]);
                     if (current_time <= single_time || (has_next_start && current_time >= next_start)) {
-                        OS::get_singleton()->alert("The current time cannot exceed the next in point or be earlier than the current point.", "ERROR");
+                        OS::get_singleton()->alert(
+                            tr("The out point must be after its in point and before the next in point."),
+                            tr("Error"));
                         break;
                     }
                     in_out_point.append(current_time);

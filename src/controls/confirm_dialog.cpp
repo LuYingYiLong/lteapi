@@ -240,9 +240,9 @@ namespace godot {
 			}
 			int64_t remaining = (int64_t)Math::ceil(timer->get_time_left());
 			Array format_args;
-			format_args.append(data.original_text);
+			format_args.append(button->tr(data.original_text));
 			format_args.append(remaining);
-			button->set_text(data.text_template % format_args);
+			button->set_text(tr(data.text_template) % format_args);
 		}
 		if (!has_active) {
 			set_process(false);
