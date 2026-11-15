@@ -8,7 +8,6 @@
 #include "timeline_server.h"
 #include "undo_redo_server.h"
 
-#include <godot_cpp/classes/canvas_layer.hpp>
 
 namespace godot {
 	LTEProjectManager* LTEProjectManager::singleton = nullptr;
@@ -748,15 +747,6 @@ namespace godot {
 				parameters["auto_play"] = auto_play;
 				game->call_deferred("_apply_open_parameters", parameters);	// 延迟调用
 			}
-		}
-		Ref<PackedScene> packed_overlay = Utils::load<PackedScene>("uid://c76rqxy2gq4bh");
-		if (packed_overlay.is_valid() && packed_overlay->can_instantiate()) {
-			CanvasLayer* overlay_layer = memnew(CanvasLayer);
-			overlay_layer->set_name("OverlayCanvasLayer");
-			overlay_layer->set_layer(200);
-			Node* overlay = packed_overlay->instantiate();
-			window->add_child(overlay_layer);
-			overlay_layer->add_child(overlay);
 		}
 		window->show();
 		return OK;

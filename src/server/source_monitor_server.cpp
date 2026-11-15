@@ -2,7 +2,6 @@
 
 #include "project_manager.h"
 
-#include <godot_cpp/classes/canvas_layer.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -862,18 +861,6 @@ namespace godot {
 		}
 		else {
 			ERR_PRINT("run_game_instance_on_window: Failed to load game");
-		}
-		Ref<PackedScene> packed_overlay = Utils::load<PackedScene>("uid://c76rqxy2gq4bh");
-		if (packed_overlay.is_valid() && packed_overlay->can_instantiate()) {
-			CanvasLayer* overlay_layer = memnew(CanvasLayer);
-			overlay_layer->set_name("OverlayCanvasLayer");
-			overlay_layer->set_layer(200);
-			Node* overlay = packed_overlay->instantiate();
-			window->add_child(overlay_layer);
-			overlay_layer->add_child(overlay);
-		}
-		else {
-			WARN_PRINT("run_game_instance_on_window: Failed to load overlay");
 		}
 		window->show();
 		int32_t window_id = window->get_window_id();
