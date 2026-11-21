@@ -20,11 +20,13 @@
 namespace godot {
 	LTENoteSkinServer* LTENoteSkinServer::singleton = nullptr;
 	static const char* DEFAULT_SKIN_PROJECT_SETTING = "lightech/note_skin/default_skin";
+	static const char* BUILTIN_SKIN_UID = "uid://b2p1unspy4j0s";
 	static const char* DEFAULT_SKIN_PATH = "res://datas/vanilla_skin.lteskin";
 
 	void LTENoteSkinServer::_bind_methods() {
 		ClassDB::bind_method(D_METHOD("set_package_skin_source", "project_path", "package"), &LTENoteSkinServer::set_package_skin_source);
 		ClassDB::bind_method(D_METHOD("normalize_skin_path", "skin_path"), &LTENoteSkinServer::normalize_skin_path);
+		ClassDB::bind_method(D_METHOD("get_builtin_skin_path"), &LTENoteSkinServer::get_builtin_skin_path);
 		ClassDB::bind_method(D_METHOD("get_default_skin_path"), &LTENoteSkinServer::get_default_skin_path);
 		ClassDB::bind_method(D_METHOD("set_default_skin_path", "skin_path"), &LTENoteSkinServer::set_default_skin_path);
 		ClassDB::bind_method(D_METHOD("make_default_skin_manifest", "metadata"), &LTENoteSkinServer::make_default_skin_manifest, DEFVAL(Dictionary()));
@@ -94,13 +96,15 @@ namespace godot {
 		}
 		if (normalized_path.begins_with("uid://")) {
 			ResourceUID* resource_uid = ResourceUID::get_singleton();
-			if (resource_uid) {
-				String uid_path = resource_uid->uid_to_path(normalized_path).replace("\\", "/").strip_edges().simplify_path();
-				if (!uid_path.is_empty()) {
-					normalized_path = uid_path;
-				}
+			if (!resource_uid) {
+				return String();
 			}
-			if (normalized_path.begins_with("uid://")) {
+			const int64_t resource_id = resource_uid->text_to_id(normalized_path);
+			if (resource_id == ResourceUID::INVALID_ID || !resource_uid->has_id(resource_id)) {
+				return String();
+			}
+			normalized_path = resource_uid->get_id_path(resource_id).replace("\\", "/").strip_edges().simplify_path();
+			if (normalized_path.is_empty()) {
 				return String();
 			}
 		}
@@ -125,18 +129,23 @@ namespace godot {
 		return root_dir.path_join(normalized_path).replace("\\", "/").simplify_path();
 	}
 
+	String LTENoteSkinServer::get_builtin_skin_path() const {
+		String skin_path = normalize_skin_path(String(BUILTIN_SKIN_UID));
+		return skin_path.is_empty() ? String(DEFAULT_SKIN_PATH) : skin_path;
+	}
+
 	String LTENoteSkinServer::get_default_skin_path() const {
 		ProjectSettings* project_settings = ProjectSettings::get_singleton();
 		if (!project_settings || !project_settings->has_setting(DEFAULT_SKIN_PROJECT_SETTING)) {
-			return String(DEFAULT_SKIN_PATH);
+			return get_builtin_skin_path();
 		}
 		String skin_path = String(project_settings->get_setting(DEFAULT_SKIN_PROJECT_SETTING));
 		skin_path = skin_path.replace("\\", "/").strip_edges().simplify_path();
 		if (skin_path.is_empty()) {
-			return String(DEFAULT_SKIN_PATH);
+			return get_builtin_skin_path();
 		}
 		String normalized_path = normalize_skin_path(skin_path);
-		return normalized_path.is_empty() ? String(DEFAULT_SKIN_PATH) : normalized_path;
+		return normalized_path.is_empty() ? get_builtin_skin_path() : normalized_path;
 	}
 
 	void LTENoteSkinServer::set_default_skin_path(const String& skin_path) const {

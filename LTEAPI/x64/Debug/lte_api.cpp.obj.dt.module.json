@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "LTEAPI\\x64\\Debug\\lte_api.obj",
+            "outputs": [
+                "LTEAPI\\x64\\Debug\\lte_api.cpp.obj.dt.module.json",
+                "LTEAPI\\x64\\Debug\\lte_api.cpp.obj.dt.d.json"
+            ],
+            "requires": []
+        }
+    ]
+}

@@ -75,6 +75,7 @@ namespace godot {
 		void clear_project_state();
 		void set_package_skin_source(const String& project_path, const Ref<LightechZipReader>& package);
 		String normalize_skin_path(const String& skin_path) const;
+		String get_builtin_skin_path() const;
 		String get_default_skin_path() const;
 		void set_default_skin_path(const String& skin_path) const;
 		Dictionary make_default_skin_manifest(const Dictionary& metadata = Dictionary()) const;
