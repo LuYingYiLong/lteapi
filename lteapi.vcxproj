@@ -136,6 +136,7 @@
   <ItemGroup>
     <ClInclude Include="src\controls\confirm_dialog.h" />
     <ClInclude Include="src\controls\stauts_label.h" />
+    <ClInclude Include="src\editor\lightech_zip_importer.h" />
     <ClInclude Include="src\editor\note_skin_editor_plugin.h" />
     <ClInclude Include="src\editor\note_skin_importer.h" />
     <ClInclude Include="src\server\backup_server.h" />
@@ -168,6 +169,7 @@
     <ClInclude Include="src\server\properties_server.h" />
     <ClInclude Include="src\register_types.h" />
     <ClInclude Include="src\resource\settings_config.h" />
+    <ClInclude Include="src\resource\lightech_zip_resource.h" />
     <ClInclude Include="src\server\source_monitor_server.h" />
     <ClInclude Include="src\server\timeline_server.h" />
     <ClInclude Include="src\util\utils.h" />
@@ -182,6 +184,7 @@
   <ItemGroup>
     <ClCompile Include="src\controls\confirm_dialog.cpp" />
     <ClCompile Include="src\controls\stauts_label.cpp" />
+    <ClCompile Include="src\editor\lightech_zip_importer.cpp" />
     <ClCompile Include="src\editor\note_skin_editor_plugin.cpp" />
     <ClCompile Include="src\editor\note_skin_importer.cpp" />
     <ClCompile Include="src\server\backup_server.cpp" />
@@ -211,6 +214,7 @@
     <ClCompile Include="src\server\properties_server.cpp" />
     <ClCompile Include="src\register_types.cpp" />
     <ClCompile Include="src\resource\settings_config.cpp" />
+    <ClCompile Include="src\resource\lightech_zip_resource.cpp" />
     <ClCompile Include="src\server\source_monitor_server.cpp" />
     <ClCompile Include="src\server\timeline_server.cpp" />
     <ClCompile Include="src\util\utils.cpp" />

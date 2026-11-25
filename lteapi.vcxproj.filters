@@ -150,6 +150,9 @@
     <ClInclude Include="src\resource\note_skin_resource.h">
       <Filter>Header File\resource</Filter>
     </ClInclude>
+    <ClInclude Include="src\resource\lightech_zip_resource.h">
+      <Filter>Header File\resource</Filter>
+    </ClInclude>
     <ClInclude Include="src\resource\settings_config.h">
       <Filter>Header File\resource</Filter>
     </ClInclude>
@@ -196,6 +199,9 @@
       <Filter>Header File\controls</Filter>
     </ClInclude>
     <ClInclude Include="src\editor\note_skin_editor_plugin.h">
+      <Filter>Header File\editor</Filter>
+    </ClInclude>
+    <ClInclude Include="src\editor\lightech_zip_importer.h">
       <Filter>Header File\editor</Filter>
     </ClInclude>
     <ClInclude Include="src\editor\note_skin_importer.h">
@@ -302,6 +308,9 @@
     <ClCompile Include="src\resource\note_skin_resource.cpp">
       <Filter>Source File\resource</Filter>
     </ClCompile>
+    <ClCompile Include="src\resource\lightech_zip_resource.cpp">
+      <Filter>Source File\resource</Filter>
+    </ClCompile>
     <ClCompile Include="src\resource\settings_config.cpp">
       <Filter>Source File\resource</Filter>
     </ClCompile>
@@ -348,6 +357,9 @@
       <Filter>Source File\controls</Filter>
     </ClCompile>
     <ClCompile Include="src\editor\note_skin_editor_plugin.cpp">
+      <Filter>Source File\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\editor\lightech_zip_importer.cpp">
       <Filter>Source File\editor</Filter>
     </ClCompile>
     <ClCompile Include="src\editor\note_skin_importer.cpp">

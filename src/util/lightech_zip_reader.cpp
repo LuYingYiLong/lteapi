@@ -197,13 +197,16 @@ namespace godot {
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("is_archive", "path"), &LightechZipReader::is_archive);
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("get_archive_stamp", "path"), &LightechZipReader::get_archive_stamp);
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("open", "path"), &LightechZipReader::open);
+		ClassDB::bind_static_method("LightechZipReader", D_METHOD("open_memory", "data", "identity"), &LightechZipReader::open_memory);
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("read_entry", "archive_path", "entry"), &LightechZipReader::read_entry);
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("is_package_path", "path"), &LightechZipReader::is_package_path);
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("resolve_asset", "project_path", "path"), &LightechZipReader::resolve_asset);
 		ClassDB::bind_static_method("LightechZipReader", D_METHOD("read_asset", "path"), &LightechZipReader::read_asset);
 		ClassDB::bind_method(D_METHOD("read_resource", "path"), &LightechZipReader::read_resource);
 		ClassDB::bind_method(D_METHOD("get_project_roots"), &LightechZipReader::get_project_roots);
+		ClassDB::bind_method(D_METHOD("get_archive_path"), &LightechZipReader::get_archive_path);
 		ClassDB::bind_method(D_METHOD("get_info", "project_root"), &LightechZipReader::get_info);
+		ClassDB::bind_method(D_METHOD("get_project_path", "project_root"), &LightechZipReader::get_project_path);
 		ClassDB::bind_method(D_METHOD("get_entries"), &LightechZipReader::get_entries);
 		ClassDB::bind_method(D_METHOD("get_entry_name", "project_root", "relative_path"), &LightechZipReader::get_entry_name);
 		ClassDB::bind_method(D_METHOD("read_project_file", "project_root", "relative_path"), &LightechZipReader::read_project_file);
@@ -245,44 +248,81 @@ namespace godot {
 		if (stamp.is_empty()) {
 			return nullptr;
 		}
-		Ref<FileAccess> file = FileAccess::open(archive_path, FileAccess::READ);
-		if (file.is_null() || file->get_length() != uint64_t(stamp[1])) {
-			return nullptr;
-		}
-		const auto read = [&file](int64_t offset, int64_t length) { return read_file_range(file, offset, length); };
 		Ref<LightechZipReader> package;
 		package.instantiate();
 		package->archive_path = archive_path;
 		package->archive_stamp = stamp;
-		package->entry_index = index_zip(stamp[1], read);
+		if (!package->_initialize_archive()) {
+			return nullptr;
+		}
+		return get_archive_stamp(archive_path) == stamp ? package : Ref<LightechZipReader>();
+	}
+
+	Ref<LightechZipReader> LightechZipReader::open_memory(const PackedByteArray& data, const String& identity) {
+		if (data.is_empty() || identity.strip_edges().is_empty()) {
+			return nullptr;
+		}
+		Ref<LightechZipReader> package;
+		package.instantiate();
+		package->archive_path = identity.replace("\\", "/").simplify_path();
+		package->archive_data = data;
+		package->memory_backed = true;
+		return package->_initialize_archive() ? package : Ref<LightechZipReader>();
+	}
+
+	bool LightechZipReader::_initialize_archive() {
+		Ref<FileAccess> file;
+		int64_t archive_size = 0;
+		if (memory_backed) {
+			archive_size = archive_data.size();
+			if (archive_size <= 0) {
+				return false;
+			}
+		} else {
+			if (archive_stamp.size() < 2 || get_archive_stamp(archive_path) != archive_stamp) {
+				return false;
+			}
+			file = FileAccess::open(archive_path, FileAccess::READ);
+			if (file.is_null() || file->get_length() != uint64_t(archive_stamp[1])) {
+				return false;
+			}
+			archive_size = archive_stamp[1];
+		}
+		const auto read = [this, &file](int64_t offset, int64_t length) {
+			return memory_backed ? archive_data.slice(offset, offset + length) : read_file_range(file, offset, length);
+		};
+		entry_index = index_zip(archive_size, read);
+		if (entry_index.is_empty()) {
+			return false;
+		}
 		HashSet<String> seen;
-		for (const Variant& name_value : package->entry_index.keys()) {
+		for (const Variant& name_value : entry_index.keys()) {
 			String name = name_value;
 			String normalized = name.replace("\\", "/");
 			String entry = normalized.trim_suffix("/");
 			String key = path_key(entry);
 			if (!is_relative_path(entry) || seen.has(key)) {
-				return nullptr;
+				return false;
 			}
 			seen.insert(key);
 			if (!normalized.ends_with("/")) {
-				package->entries.append(entry);
-				package->entry_names[key] = name;
+				entries.append(entry);
+				entry_names[key] = name;
 			}
 		}
 
 		Dictionary candidates;
-		for (const String& entry : package->entries) {
+		for (const String& entry : entries) {
 			for (String parent = entry.get_base_dir(); !parent.is_empty(); parent = parent.get_base_dir()) {
-				if (package->entry_names.has(path_key(parent))) {
-					return nullptr;
+				if (entry_names.has(path_key(parent))) {
+					return false;
 				}
 			}
 			if (entry.get_file() != "info.json") {
 				continue;
 			}
-			String name = package->entry_names[path_key(entry)];
-			PackedByteArray bytes = read_zip_entry(package->entry_index[name], stamp[1], ZIP64_FIELD, read);
+			String name = entry_names[path_key(entry)];
+			PackedByteArray bytes = read_zip_entry(entry_index[name], archive_size, ZIP64_FIELD, read);
 			if (bytes.is_empty()) {
 				continue;
 			}
@@ -296,7 +336,7 @@ namespace godot {
 		roots.sort();
 		for (const String& root : roots) {
 			bool nested = false;
-			for (const Variant& parent_key : package->project_info.keys()) {
+			for (const Variant& parent_key : project_info.keys()) {
 				String parent = parent_key;
 				if (parent.is_empty() || path_key(root).begins_with(path_key(parent) + "/")) {
 					nested = true;
@@ -304,10 +344,10 @@ namespace godot {
 				}
 			}
 			if (!nested) {
-				package->project_info[root] = candidates[root];
+				project_info[root] = candidates[root];
 			}
 		}
-		return package->project_info.is_empty() || get_archive_stamp(archive_path) != stamp ? Ref<LightechZipReader>() : package;
+		return !project_info.is_empty() && (memory_backed || get_archive_stamp(archive_path) == archive_stamp);
 	}
 
 	PackedByteArray LightechZipReader::read_entry(const String& archive_path, const String& entry) {
@@ -394,7 +434,11 @@ namespace godot {
 	}
 
 	PackedByteArray LightechZipReader::_read_indexed_file(const String& name) const {
-		if (get_archive_stamp(archive_path) != archive_stamp) {
+		if (memory_backed) {
+			const auto read = [this](int64_t offset, int64_t length) { return archive_data.slice(offset, offset + length); };
+			return read_zip_entry(entry_index.get(name, PackedInt64Array()), archive_data.size(), ZIP64_FIELD, read);
+		}
+		if (archive_stamp.size() < 2 || get_archive_stamp(archive_path) != archive_stamp) {
 			return {};
 		}
 		Ref<FileAccess> file = FileAccess::open(archive_path, FileAccess::READ);
@@ -433,9 +477,24 @@ namespace godot {
 		return roots;
 	}
 
+	String LightechZipReader::get_archive_path() const {
+		return archive_path;
+	}
+
 	Dictionary LightechZipReader::get_info(const String& project_root) const {
 		Dictionary info = project_info.get(project_root, Dictionary());
 		return info.duplicate(true);
+	}
+
+	String LightechZipReader::get_project_path(const String& project_root) const {
+		if (!project_info.has(project_root) || archive_path.is_empty()) {
+			return {};
+		}
+		String path = String(PACKAGE_PREFIX) + archive_path.uri_encode() + "/" + project_root.uri_encode();
+		if (!memory_backed && archive_stamp.size() >= 2) {
+			path += "#" + String::num_int64(archive_stamp[0]) + "-" + String::num_int64(archive_stamp[1]);
+		}
+		return path;
 	}
 
 	PackedStringArray LightechZipReader::get_entries() const {

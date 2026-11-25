@@ -3,6 +3,7 @@
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_int64_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 
@@ -13,10 +14,13 @@ namespace godot {
 	private:
 		String archive_path;
 		PackedInt64Array archive_stamp;
+		PackedByteArray archive_data;
+		bool memory_backed = false;
 		Dictionary entry_index;
 		Dictionary project_info;
 		PackedStringArray entries;
 		Dictionary entry_names;
+		bool _initialize_archive();
 		PackedByteArray _read_indexed_file(const String& name) const;
 
 	protected:
@@ -26,6 +30,7 @@ namespace godot {
 		static bool is_archive(const String& path);
 		static PackedInt64Array get_archive_stamp(const String& path);
 		static Ref<LightechZipReader> open(const String& path);
+		static Ref<LightechZipReader> open_memory(const PackedByteArray& data, const String& identity);
 		static PackedByteArray read_entry(const String& archive_path, const String& entry);
 		static bool is_package_path(const String& path);
 		static String resolve_asset(const String& project_path, const String& path);
@@ -34,7 +39,9 @@ namespace godot {
 		static PackedByteArray read_memory_zip_entry(const PackedByteArray& bytes, const Dictionary& index, const String& name);
 		PackedByteArray read_resource(const String& path) const;
 		PackedStringArray get_project_roots() const;
+		String get_archive_path() const;
 		Dictionary get_info(const String& project_root) const;
+		String get_project_path(const String& project_root) const;
 		PackedStringArray get_entries() const;
 		String get_entry_name(const String& project_root, const String& relative_path) const;
 		PackedByteArray read_project_file(const String& project_root, const String& relative_path) const;

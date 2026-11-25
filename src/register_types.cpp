@@ -39,6 +39,8 @@
 #include "note_skin_editor_plugin.h"
 #include "note_skin_importer.h"
 #include "note_skin_resource.h"
+#include "lightech_zip_importer.h"
+#include "lightech_zip_resource.h"
 #include "note_skin_server.h"
 #include "path_editor_server.h"
 #include "inspector_registry.h"
@@ -65,7 +67,7 @@ using namespace godot;
 static LTEAPI* lte_api_instance = nullptr;
 static const char* DEFAULT_SKIN_PROJECT_SETTING = "lightech/note_skin/default_skin";
 static const char* DEFAULT_SKIN_PATH = "res://datas/vanilla_skin.lteskin";
-static bool note_skin_editor_plugin_registered = false;
+static bool lteapi_editor_plugin_registered = false;
 
 static void add_lte_project_setting(const String& p_name, const Variant& p_default_value, const Variant::Type p_type, const PropertyHint p_hint = PROPERTY_HINT_NONE, const String& p_hint_string = String()) {
 	ProjectSettings* settings = ProjectSettings::get_singleton();
@@ -89,10 +91,11 @@ static void add_lte_project_setting(const String& p_name, const Variant& p_defau
 void initialize_example_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
 		GDREGISTER_CLASS(LTENoteSkinImporter);
+		GDREGISTER_CLASS(LightechZipImporter);
 		GDREGISTER_CLASS(LTENoteSkinEditorPlugin);
-		if (!note_skin_editor_plugin_registered) {
+		if (!lteapi_editor_plugin_registered) {
 			EditorPlugins::add_by_type<LTENoteSkinEditorPlugin>();
-			note_skin_editor_plugin_registered = true;
+			lteapi_editor_plugin_registered = true;
 		}
 		add_lte_project_setting(DEFAULT_SKIN_PROJECT_SETTING, String(DEFAULT_SKIN_PATH), Variant::STRING, PROPERTY_HINT_FILE, "*.lteskin");
 		return;
@@ -142,6 +145,7 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(LTEShaderServer);
 	GDREGISTER_CLASS(LTEAudioVisualizerServer);
 	GDREGISTER_CLASS(LTENoteSkinResource);
+	GDREGISTER_CLASS(LightechZipResource);
 	GDREGISTER_CLASS(LTENoteSkinServer);
 	GDREGISTER_CLASS(LTEBackupServer);
 	GDREGISTER_CLASS(LTEPathEditorServer);
@@ -187,9 +191,9 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 
 void uninitialize_example_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
-		if (note_skin_editor_plugin_registered) {
+		if (lteapi_editor_plugin_registered) {
 			EditorPlugins::remove_by_type<LTENoteSkinEditorPlugin>();
-			note_skin_editor_plugin_registered = false;
+			lteapi_editor_plugin_registered = false;
 		}
 		return;
 	}

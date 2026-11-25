@@ -5,12 +5,14 @@
 #include <godot_cpp/classes/ref.hpp>
 
 namespace godot {
+	class LightechZipImporter;
 	class LTENoteSkinImporter;
 
 	class LTENoteSkinEditorPlugin : public EditorPlugin {
 		GDCLASS(LTENoteSkinEditorPlugin, EditorPlugin)
 
 	private:
+		Ref<LightechZipImporter> zip_importer;
 		Ref<LTENoteSkinImporter> importer;
 
 	protected:
